@@ -24,7 +24,7 @@ struct uart_tm4c123_dev_data_t {
 #define DEV_CFG(dev) \
     ((const struct uart_device_config* const)(dev)->config->config_info)
 #define DEV_DATA(dev) \
-    ((struct uart_tm4c123_dev_data_t * const)(dev)->driver_data)
+    ((struct uart_tm4c123_dev_data_t* const)(dev)->driver_data)
 
 static struct device DEVICE_NAME_GET(uart_tm4c123_0);
 
@@ -237,11 +237,12 @@ static void uart_tm4c123_isr(void* arg)
     if (dev_data->cb) {
         dev_data->cb(dev);
     }
+
     /*
     * Clear interrupts only after cb called, as Zephyr UART clients expect
     * to check interrupt status during the callback.
     */
-    //MAP_UARTIntDisable((unsigned long)config->base, int_status);
+    MAP_UARTIntClear((unsigned long)config->base, int_status);
 }
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 

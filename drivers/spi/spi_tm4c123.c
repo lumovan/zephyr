@@ -33,30 +33,6 @@
 #define DEV_DATA(dev) \
     ((struct spi_tm4c123_data* const)(dev->driver_data))
 
-#ifdef CONFIG_SPI_TM4C123_INTERRUPT
-static void spi_tm4c123_isr(void* arg)
-{
-    struct device* const dev = (struct device*)arg;
-    const struct spi_tm4c123_config* cfg = dev->config->config_info;
-    struct spi_tm4c123_data* data = dev->driver_data;
-    int err;
-
-    err = spi_tm4c123_get_err(spi);
-    if (err) {
-        spi_tm4c123_complete(dev, data, err);
-        return;
-    }
-
-    if (spi_tm4c123_transfer_ongoing(data)) {
-        err = spi_tm4c123_shift_frames(spi, data);
-    }
-
-    if (err || !spi_tm4c123_transfer_ongoing(data)) {
-        spi_tm4c123_complete(data, spi, err);
-    }
-}
-#endif
-
 static bool spi_tm4c123_transfer_ongoing(struct spi_tm4c123_data* data)
 {
     return spi_context_tx_on(&data->ctx) || spi_context_rx_on(&data->ctx);
@@ -136,7 +112,6 @@ static void spi_tm4c123_shift_s(struct device* dev, struct spi_tm4c123_data* dat
     const struct spi_tm4c123_config* cfg = DEV_CFG(dev);
 
     tx_frame = (u32_t)spi_tm4c123_next_tx(data);
-    //if (LL_SPI_IsActiveFlag_TXE(spi)) {
 
     MAP_SSIDataPut(cfg->spi_base, tx_frame);
     if (SPI_WORD_SIZE_GET(data->ctx.config->operation) == 8) {
@@ -146,9 +121,7 @@ static void spi_tm4c123_shift_s(struct device* dev, struct spi_tm4c123_data* dat
         /* The update is ignored if TX is off. */
         spi_context_update_tx(&data->ctx, 2, 1);
     }
-    //}
 
-    //if (LL_SPI_IsActiveFlag_RXNE(spi)) {
     if (SPI_WORD_SIZE_GET(data->ctx.config->operation) == 8) {
         MAP_SSIDataGet(cfg->spi_base, &rx_frame);
         if (spi_context_rx_buf_on(&data->ctx)) {
@@ -164,7 +137,6 @@ static void spi_tm4c123_shift_s(struct device* dev, struct spi_tm4c123_data* dat
         }
         spi_context_update_rx(&data->ctx, 2, 1);
     }
-    //}
 }
 
 static int spi_tm4c123_shift_frames(struct device* dev, struct spi_tm4c123_data* data)
@@ -242,18 +214,10 @@ static void spi_tm4c123_complete(struct device* dev, struct spi_tm4c123_data* da
     const struct spi_tm4c123_config* cfg = DEV_CFG(dev);
 
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
-    MAP_SSIIntEnable(cfg->spi_base, uint32_t ui32IntFlags);
-#endif
-
-    spi_context_cs_control(&data->ctx, false);
-
-    // if (LL_SPI_GetMode(spi) == LL_SPI_MODE_MASTER) {
-    //     while (LL_SPI_IsActiveFlag_BSY(spi)) {
-    //         /* NOP */
-    //     }
-    // }
-
+    MAP_SSIIntDisable(cfg->spi_base, SSI_TXFF | SSI_RXFF);
     MAP_SSIDisable(cfg->spi_base);
+#endif
+    spi_context_cs_control(&data->ctx, false);
 
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
     spi_context_complete(&data->ctx, status);
@@ -296,8 +260,10 @@ static int transceive(struct device* dev,
     spi_context_cs_control(&data->ctx, true);
 
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
-/* TODO: send or receive use interrupt */
-//ret = spi_context_wait_for_completion(&data->ctx);
+
+    MAP_SSIIntClear((unsigned long)cfg->spi_base, SSI_TXFF | SSI_RXFF);
+    MAP_SSIIntEnable(cfg->spi_base, SSI_TXFF | SSI_RXFF);
+    ret = spi_context_wait_for_completion(&data->ctx);
 #else
     do {
         ret = spi_tm4c123_shift_frames(dev, data);
@@ -352,13 +318,39 @@ static int spi_tm4c123_init(struct device* dev)
 
     spi_context_unlock_unconditionally(&data->ctx);
 
+#ifdef CONFIG_SPI_TM4C123_INTERRUPT
+    cfg->irq_config(dev);
+#endif
+
     return 0;
 }
+
+#ifdef CONFIG_SPI_TM4C123_INTERRUPT
+static void spi_tm4c123_isr(void* arg)
+{
+    struct device* const dev = (struct device*)arg;
+    const struct spi_tm4c123_config* cfg = DEV_CFG(dev);
+    struct spi_tm4c123_data* data = DEV_DATA(dev);
+    int err;
+    unsigned int int_status;
+
+    int_status = MAP_SSIIntStatus((unsigned long)cfg->spi_base, true);
+    MAP_SSIIntClear((unsigned long)cfg->spi_base, int_status);
+
+    if (spi_tm4c123_transfer_ongoing(data)) {
+        err = spi_tm4c123_shift_frames(dev, data);
+    }
+
+    if (err || !spi_tm4c123_transfer_ongoing(data)) {
+        spi_tm4c123_complete(dev, data, err);
+    }
+}
+#endif
 
 #ifdef CONFIG_SPI_0
 
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
-static void spi_tm4c123_irq_config_func_0(struct device* port);
+static void spi_tm4c123_irq_config_func_0(struct device* dev);
 #endif
 
 static const struct spi_tm4c123_config spi_tm4c123_cfg_0 = {
