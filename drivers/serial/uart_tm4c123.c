@@ -17,7 +17,7 @@
 
 struct uart_tm4c123_dev_data_t {
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-    uart_irq_callback_t cb; /**< Callback function pointer */
+    uart_irq_callback_user_data_t cb; /**< Callback function pointer */
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 };
 
@@ -209,7 +209,7 @@ static int uart_tm4c123_irq_update(struct device* dev)
 }
 
 static void uart_tm4c123_irq_callback_set(struct device* dev,
-    uart_irq_callback_t cb)
+    uart_irq_callback_user_data_t cb, void* user_data)
 {
     struct uart_tm4c123_dev_data_t* const dev_data = DEV_DATA(dev);
 
@@ -263,7 +263,7 @@ static const struct uart_driver_api uart_tm4c123_driver_api = {
     .irq_err_disable = uart_tm4c123_irq_err_disable,
     .irq_is_pending = uart_tm4c123_irq_is_pending,
     .irq_update = uart_tm4c123_irq_update,
-    .irq_callback_set = uart_tm4c123_irq_callback_set,
+    .irq_callback_set = uart_tm4c123_irq_callback_set
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 };
 
