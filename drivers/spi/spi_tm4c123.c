@@ -215,8 +215,9 @@ static void spi_tm4c123_complete(struct device* dev, struct spi_tm4c123_data* da
 
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
     MAP_SSIIntDisable(cfg->spi_base, SSI_TXFF | SSI_RXFF);
-    MAP_SSIDisable(cfg->spi_base);
 #endif
+
+    MAP_SSIDisable(cfg->spi_base);
     spi_context_cs_control(&data->ctx, false);
 
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
