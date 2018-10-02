@@ -356,7 +356,7 @@ static void spi_tm4c123_irq_config_func_0(struct device* dev);
 
 static const struct spi_tm4c123_config spi_tm4c123_cfg_0 = {
     .spi_clk = CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC,
-    .spi_base = CONFIG_SPI_0_TM4C123_BASE_ADDRESS,
+    .spi_base = CONFIG_SPI_0_BASE_ADDRESS,
     .peripheral = SYSCTL_PERIPH_SSI0,
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
     .irq_config = spi_tm4c123_irq_config_func_0,
@@ -368,7 +368,7 @@ static struct spi_tm4c123_data spi_tm4c123_dev_data_0 = {
     SPI_CONTEXT_INIT_SYNC(spi_tm4c123_dev_data_0, ctx),
 };
 
-DEVICE_AND_API_INIT(spi_tm4c123_0, CONFIG_SPI_0_TM4C123_NAME, &spi_tm4c123_init,
+DEVICE_AND_API_INIT(spi_tm4c123_0, CONFIG_SPI_0_NAME, &spi_tm4c123_init,
     &spi_tm4c123_dev_data_0, &spi_tm4c123_cfg_0,
     POST_KERNEL, CONFIG_SPI_INIT_PRIORITY,
     &api_funcs);
@@ -376,9 +376,9 @@ DEVICE_AND_API_INIT(spi_tm4c123_0, CONFIG_SPI_0_TM4C123_NAME, &spi_tm4c123_init,
 #ifdef CONFIG_SPI_TM4C123_INTERRUPT
 static void spi_tm4c123_irq_config_func_0(struct device* dev)
 {
-    IRQ_CONNECT(CONFIG_SPI_0_TM4C123_IRQ, CONFIG_SPI_0_TM4C123_IRQ_PRI,
+    IRQ_CONNECT(CONFIG_SPI_0_IRQ, CONFIG_SPI_0_IRQ_PRI,
         spi_tm4c123_isr, DEVICE_GET(spi_tm4c123_0), 0);
-    irq_enable(CONFIG_SPI_0_TM4C123_IRQ);
+    irq_enable(CONFIG_SPI_0_IRQ);
 }
 #endif
 

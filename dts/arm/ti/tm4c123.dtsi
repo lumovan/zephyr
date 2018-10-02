@@ -31,7 +31,7 @@
 		spi0: spi@40008000 {
 			compatible = "ti,tm4c123-spi";
 			reg = <0x40008000 0x1000>;
-			interrupts = <7 0>; /* 7 = 23(TI uart interrupt num) - 16(zephyr), for compatible zephyr */
+			interrupts = <7 3>; /* 7 = 23(TI uart interrupt num) - 16(zephyr), for compatible zephyr */
 			status = "disabled";
 			label = "SPI_0";
 		};
