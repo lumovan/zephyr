@@ -71,7 +71,7 @@ static void spi_tm4c123_shift_m(struct device* dev, struct spi_tm4c123_data* dat
     const struct spi_tm4c123_config* cfg = DEV_CFG(dev);
 
     tx_frame = (u32_t)spi_tm4c123_next_tx(data);
-    while (MAP_SSIDataGetNonBlocking(cfg->spi_base, &rx_frame)) {
+    while (MAP_SSIDataGetNonBlocking(cfg->spi_base, (uint32_t*)&rx_frame)) {
         /* NOP */
     }
 
@@ -90,13 +90,13 @@ static void spi_tm4c123_shift_m(struct device* dev, struct spi_tm4c123_data* dat
     }
 
     if (SPI_WORD_SIZE_GET(data->ctx.config->operation) == 8) {
-        MAP_SSIDataGet(cfg->spi_base, &rx_frame);
+        MAP_SSIDataGet(cfg->spi_base, (uint32_t*)&rx_frame);
         if (spi_context_rx_buf_on(&data->ctx)) {
             UNALIGNED_PUT((u16_t)rx_frame, (u8_t*)data->ctx.rx_buf);
         }
         spi_context_update_rx(&data->ctx, 1, 1);
     } else {
-        MAP_SSIDataGet(cfg->spi_base, &rx_frame);
+        MAP_SSIDataGet(cfg->spi_base, (uint32_t*)&rx_frame);
         if (spi_context_rx_buf_on(&data->ctx)) {
             UNALIGNED_PUT((u16_t)rx_frame, (u16_t*)data->ctx.rx_buf);
         }
@@ -123,14 +123,14 @@ static void spi_tm4c123_shift_s(struct device* dev, struct spi_tm4c123_data* dat
     }
 
     if (SPI_WORD_SIZE_GET(data->ctx.config->operation) == 8) {
-        MAP_SSIDataGet(cfg->spi_base, &rx_frame);
+        MAP_SSIDataGet(cfg->spi_base, (uint32_t*)&rx_frame);
         if (spi_context_rx_buf_on(&data->ctx)) {
             UNALIGNED_PUT((u16_t)rx_frame,
                 (u8_t*)data->ctx.rx_buf);
         }
         spi_context_update_rx(&data->ctx, 1, 1);
     } else {
-        MAP_SSIDataGet(cfg->spi_base, &rx_frame);
+        MAP_SSIDataGet(cfg->spi_base, (uint32_t*)&rx_frame);
         if (spi_context_rx_buf_on(&data->ctx)) {
             UNALIGNED_PUT((u16_t)rx_frame,
                 (u16_t*)data->ctx.rx_buf);
