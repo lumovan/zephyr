@@ -35,17 +35,13 @@ struct dw1000_rf_registers_set {
 extern const struct dw1000_rf_registers_set dw1000_rf_settings;
 #endif
 
-/* Note for EMK & EM adapter booster pack users:
- * SPI pins are easy, RESET as well, but when it comes to GPIO:
- * CHIP -> EM adapter
- * GPIO0 -> GPIOA
- * GPIO1 -> reserved (it's SPI MISO)
- * GPIO2 -> GPIOB
- * GPIO3 -> GPIO3
- */
-
 enum dw1000_gpio_index {
-    DW1000_GPIO_IDX_GPIO0,
+    DW1000_GPIO_IDX_ISR,
+    DW1000_GPIO_IDX_WAKEUP,
+    DW1000_GPIO_IDX_RST,
+    DW1000_GPIO_IDX_EXTON,
+    DW1000_GPIO_IDX_GPIO_5,
+    DW1000_GPIO_IDX_GPIO_6,
     DW1000_GPIO_IDX_MAX,
 };
 
