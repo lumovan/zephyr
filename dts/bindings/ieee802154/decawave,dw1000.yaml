@@ -1,0 +1,35 @@
+#
+# Copyright (c) 2018, hackin, zhao
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+---
+title: decawave dw1000 802.15.4 indoor position Wireless Transceiver
+id: decawave,dw1000
+version: 0.1
+
+description: >
+    This is a representation of the decawave dw1000 wireless transceiver.
+
+inherits:
+    !include spi-device.yaml
+
+properties:
+    compatible:
+      constraint: "decawave,dw1000"
+
+    irq-gpios:
+      type: compound
+      category: required
+      generation: define, use-prop-name
+
+    reset-gpios:
+      type: compound
+      category: required
+      generation: define, use-prop-name
+
+    wakeup-gpios:
+      type: compound
+      category: required
+      generation: define, use-prop-name
+...

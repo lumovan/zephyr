@@ -33,6 +33,8 @@
 			reg = <0x40008000 0x1000>;
 			interrupts = <7 3>; /* 7 = 23(TI uart interrupt num) - 16(zephyr), for compatible zephyr */
 			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
 			label = "SPI_0";
 		};
 	};
