@@ -18,13 +18,14 @@
 struct uart_tm4c123_dev_data_t {
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
     uart_irq_callback_user_data_t cb; /**< Callback function pointer */
+    void* cb_data; /**< Callback function arg */
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 };
 
 #define DEV_CFG(dev) \
     ((const struct uart_device_config* const)(dev)->config->config_info)
 #define DEV_DATA(dev) \
-    ((struct uart_tm4c123_dev_data_t* const)(dev)->driver_data)
+    ((struct uart_tm4c123_dev_data_t * const)(dev)->driver_data)
 
 static struct device DEVICE_NAME_GET(uart_tm4c123_0);
 
@@ -52,9 +53,14 @@ static int uart_tm4c123_init(struct device* dev)
     }
 
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-    MAP_UARTConfigSetExpClk((unsigned long)config->base, uart_tm4c123_dev_cfg_0.sys_clk_freq, TI_TM4C123_UART_4000C000_CURRENT_SPEED,
+    MAP_UARTConfigSetExpClk((unsigned long)config->base,
+        uart_tm4c123_dev_cfg_0.sys_clk_freq,
+        TI_TM4C123_UART_4000C000_CURRENT_SPEED,
         (UART_CONFIG_PAR_NONE | UART_CONFIG_STOP_ONE | UART_CONFIG_WLEN_8));
 
+    MAP_UARTFlowControlSet((unsigned long)config->base,
+        UART_FLOWCONTROL_NONE);
+    /* Re-disable the FIFOs: */
     MAP_UARTFIFODisable((unsigned long)config->base);
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
@@ -70,7 +76,6 @@ static int uart_tm4c123_init(struct device* dev)
 
 #endif
 
-    MAP_UARTEnable((unsigned long)config->base);
     return 0;
 }
 
@@ -93,14 +98,34 @@ static unsigned char uart_tm4c123_poll_out(struct device* dev,
     return c;
 }
 
+static int uart_tm4c123_err_check(struct device* dev)
+{
+    const struct uart_device_config* config = DEV_CFG(dev);
+    unsigned long tm4c123_errs = 0L;
+    unsigned int z_err = 0;
+
+    tm4c123_errs = MAP_UARTRxErrorGet((unsigned long)config->base);
+
+    /* Map tm4c123 SDK uart.h defines to zephyr uart.h defines */
+    z_err = ((tm4c123_errs & UART_RXERROR_OVERRUN) ? UART_ERROR_OVERRUN : 0)
+        | ((tm4c123_errs & UART_RXERROR_BREAK) ? UART_ERROR_BREAK : 0)
+        | ((tm4c123_errs & UART_RXERROR_PARITY) ? UART_ERROR_PARITY : 0)
+        | ((tm4c123_errs & UART_RXERROR_FRAMING) ? UART_ERROR_FRAMING : 0);
+
+    MAP_UARTRxErrorClear((unsigned long)config->base);
+
+    return (int)z_err;
+}
+
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-static int uart_tm4c123_fifo_fill(struct device* dev,
+static int
+uart_tm4c123_fifo_fill(struct device* dev,
     const u8_t* tx_data, int size)
 {
     const struct uart_device_config* config = DEV_CFG(dev);
     unsigned int num_tx = 0;
 
-    while ((size - num_tx) > 0) {
+    while ((size - num_tx) > 0 && MAP_UARTSpaceAvail((unsigned long)config->base)) {
         /* Send a character */
         if (MAP_UARTCharPutNonBlocking((unsigned long)config->base,
                 tx_data[num_tx])) {
@@ -147,7 +172,7 @@ static int uart_tm4c123_irq_tx_ready(struct device* dev)
     const struct uart_device_config* config = DEV_CFG(dev);
     unsigned int int_status;
 
-    int_status = MAP_UARTIntStatus((unsigned long)config->base, UART_INT_TX);
+    int_status = MAP_UARTIntStatus((unsigned long)config->base, true);
 
     return (int_status & UART_INT_TX);
 }
@@ -178,7 +203,7 @@ static int uart_tm4c123_irq_rx_ready(struct device* dev)
     const struct uart_device_config* config = DEV_CFG(dev);
     unsigned int int_status;
 
-    int_status = MAP_UARTIntStatus((unsigned long)config->base, 1);
+    int_status = MAP_UARTIntStatus((unsigned long)config->base, true);
 
     return (int_status & UART_INT_RX);
 }
@@ -198,7 +223,7 @@ static int uart_tm4c123_irq_is_pending(struct device* dev)
     const struct uart_device_config* config = DEV_CFG(dev);
     unsigned int int_status;
 
-    int_status = MAP_UARTIntStatus((unsigned long)config->base, 1);
+    int_status = MAP_UARTIntStatus((unsigned long)config->base, true);
 
     return (int_status & (UART_INT_TX | UART_INT_RX));
 }
@@ -214,6 +239,7 @@ static void uart_tm4c123_irq_callback_set(struct device* dev,
     struct uart_tm4c123_dev_data_t* const dev_data = DEV_DATA(dev);
 
     dev_data->cb = cb;
+    dev_data->cb_data = user_data;
 }
 
 /**
@@ -232,10 +258,10 @@ static void uart_tm4c123_isr(void* arg)
     struct uart_tm4c123_dev_data_t* const dev_data = DEV_DATA(dev);
     unsigned int int_status;
 
-    int_status = MAP_UARTIntStatus((unsigned long)config->base, UART_INT_RX | UART_INT_RT);
+    int_status = MAP_UARTIntStatus((unsigned long)config->base, true);
 
     if (dev_data->cb) {
-        dev_data->cb(dev);
+        dev_data->cb(dev_data->cb_data);
     }
 
     /*
@@ -249,6 +275,7 @@ static void uart_tm4c123_isr(void* arg)
 static const struct uart_driver_api uart_tm4c123_driver_api = {
     .poll_in = uart_tm4c123_poll_in,
     .poll_out = uart_tm4c123_poll_out,
+    .err_check = uart_tm4c123_err_check,
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
     .fifo_fill = uart_tm4c123_fifo_fill,
     .fifo_read = uart_tm4c123_fifo_read,

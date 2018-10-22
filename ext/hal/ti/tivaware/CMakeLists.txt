@@ -11,6 +11,7 @@ if(CONFIG_HAS_TIVAWARE_SDK)
   zephyr_library_compile_definitions(${COMPILER})
   zephyr_library_sources(
       source/driverlib/gpio.c
+      source/driverlib/uart.c
       )
 
 endif()
