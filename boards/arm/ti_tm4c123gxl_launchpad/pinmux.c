@@ -1,26 +1,26 @@
 /**
- * 
+ *
  * Configure the device pins for different signals
- * 
+ *
  * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/
- * 
+ *
  *
  *  Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *    Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
- * 
+ *
  *    Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the
  *     distribution.
- * 
+ *
  *    Neither the name of Texas Instruments Incorporated nor the names of
  *     its contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
- * 
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -32,10 +32,10 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
+ *
  */
 
-/** 
+/**
  * This file was automatically generated on 2017/10/12 at am 12:34:13
  * by TI PinMux version 4.0.1496
  * (Then modified to meet Zephyr coding style)
@@ -60,13 +60,32 @@
  */
 int pinmux_initialize(struct device* port)
 {
-
-#if defined(CONFIG_UART_TM4C123) || defined(CONFIG_SPI_0)
+#if defined(CONFIG_GPIO_TM4C123_PORTA)
     /* Enable Peripheral Clocks */
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 #endif
-#if defined(CONFIG_GPIO_TM4C123_F0) || defined(CONFIG_GPIO_TM4C123_F1) || defined(CONFIG_GPIO_TM4C123_F2) || defined(CONFIG_GPIO_TM4C123_F3) || defined(CONFIG_GPIO_TM4C123_F4)
 
+#if defined(CONFIG_GPIO_TM4C123_PORTB)
+    /* Enable Peripheral Clocks */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+#endif
+
+#if defined(CONFIG_GPIO_TM4C123_PORTC)
+    /* Enable Peripheral Clocks */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+#endif
+
+#if defined(CONFIG_GPIO_TM4C123_PORTD)
+    /* Enable Peripheral Clocks */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+#endif
+
+#if defined(CONFIG_GPIO_TM4C123_PORTE)
+    /* Enable Peripheral Clocks */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+#endif
+
+#if defined(CONFIG_GPIO_TM4C123_PORTF)
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
 
     /* Unlock the Port Pin and Set the Commit Bit */
@@ -74,30 +93,28 @@ int pinmux_initialize(struct device* port)
     HWREG(GPIO_PORTF_BASE + GPIO_O_CR) |= GPIO_PIN_0;
     HWREG(GPIO_PORTF_BASE + GPIO_O_LOCK) = 0x0;
 #endif
-#ifdef CONFIG_GPIO_TM4C123_F4
+
+    /*
+     *  for config board switch button
+     */
     /* Configure the GPIO Pin Mux for PF4 for GPIO_PF4 */
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTF_BASE, GPIO_PIN_4);
     MAP_GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
-#endif
-#ifdef CONFIG_GPIO_TM4C123_F0
     /* Configure the GPIO Pin Mux for PF0 for GPIO_PF0 */
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTF_BASE, GPIO_PIN_0);
     MAP_GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
-#endif
-#ifdef CONFIG_GPIO_TM4C123_F1
+
+    /*
+     *  for config board RGB LEDS
+     */
     /* Configure the GPIO Pin Mux for PF1 for GPIO_PF1 */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1);
-#endif
-#ifdef CONFIG_GPIO_TM4C123_F3
     /* Configure the GPIO Pin Mux for PF3 for GPIO_PF3 */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
-#endif
-#ifdef CONFIG_GPIO_TM4C123_F2
     /* Configure the GPIO Pin Mux for PF2 for GPIO_PF2 */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_2);
-#endif
-#ifdef CONFIG_UART_TM4C123
 
+#ifdef CONFIG_UART_TM4C123
     /* Configure the GPIO Pin Mux for PA0 for U0RX */
     MAP_GPIOPinConfigure(GPIO_PA0_U0RX);
     MAP_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0);
@@ -108,7 +125,6 @@ int pinmux_initialize(struct device* port)
 #endif
 
 #ifdef CONFIG_SPI_0
-
     /* Configure the GPIO Pin Mux for PA4 for SSI0RX */
     MAP_GPIOPinConfigure(GPIO_PA4_SSI0RX);
     MAP_GPIOPinTypeSSI(GPIO_PORTA_BASE, GPIO_PIN_4);
@@ -124,6 +140,23 @@ int pinmux_initialize(struct device* port)
     /* Configure the GPIO Pin Mux for PA2 for SSI0CLK */
     MAP_GPIOPinConfigure(GPIO_PA2_SSI0CLK);
     MAP_GPIOPinTypeSSI(GPIO_PORTA_BASE, GPIO_PIN_2);
+#endif
+
+#ifdef CONFIG_IEEE802154_DW1000
+    /* Configure the GPIO Pin Mux for PB3 for DW1000 IRQ */
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTB_BASE, GPIO_PIN_3);
+    MAP_GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+
+    /* Configure the GPIO Pin Mux for PB2 for DW1000 SPI_PHA */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, GPIO_PIN_2);
+    /* Configure the GPIO Pin Mux for PE0 for DW1000 SPI_POL */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_0);
+    /* Configure the GPIO Pin Mux for PE3 for DW1000 RST */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_3);
+    /* Configure the GPIO Pin Mux for PE4 for DW1000 EXTON */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_4);
+    /* Configure the GPIO Pin Mux for PE5 for DW1000 WAKEUP */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_5);
 #endif
     return 0;
 }

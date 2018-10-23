@@ -36,7 +36,7 @@ extern const struct dw1000_rf_registers_set dw1000_rf_settings;
 #endif
 
 enum dw1000_gpio_index {
-    DW1000_GPIO_IDX_ISR,
+    DW1000_GPIO_IDX_ISR = 0,
     DW1000_GPIO_IDX_WAKEUP,
     DW1000_GPIO_IDX_RST,
     DW1000_GPIO_IDX_EXTON,

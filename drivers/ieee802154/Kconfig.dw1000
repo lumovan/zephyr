@@ -57,6 +57,8 @@ config IEEE802154_DW1000_GPIO_GPIO_6_DRV_NAME
 	  This option is mandatory to set which gpio pin to use in order
 	  to set the dw1000 SPI mode(PHA).
 
+if !HAS_DTS_SPI_DEVICE
+
 config IEEE802154_DW1000_SPI_DRV_NAME
 	string "SPI driver's name to use to access DW1000"
 	default ""
@@ -78,6 +80,10 @@ config IEEE802154_DW1000_SPI_SLAVE
 	help
 	  This option sets the SPI slave number SPI controller has to switch
 	  to when dealing with DW1000 chip.
+
+endif # !HAS_DTS_SPI_DEVICE
+
+if !HAS_DTS_SPI_PINS
 
 config IEEE802154_DW1000_GPIO_SPI_CS
 	bool "Manage SPI CS through a GPIO pin"
@@ -101,6 +107,8 @@ config IEEE802154_DW1000_GPIO_SPI_CS_PIN
 	help
 	  This option is mandatory to set which GPIO pin to use in order
 	  to actually emulate the SPI CS.
+
+endif # !HAS_DTS_SPI_PINS
 
 config IEEE802154_DW1000_RX_STACK_SIZE
 	int "Driver's internal RX thread stack size"

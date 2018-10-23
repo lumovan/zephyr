@@ -10,104 +10,164 @@ menuconfig GPIO_TM4C123
 
 if GPIO_TM4C123
 
-config GPIO_TM4C123_F1
-	bool "GPIO block F1"
+config GPIO_TM4C123_PORTA
+	bool "GPIO block A"
 	depends on GPIO_TM4C123
 	default n
 	help
-	  Include support for the GPIO port F1.
+	  Include support for the GPIO port A.
 
-config GPIO_TM4C123_F1_NAME
+config TM4C123_GPIOA_NAME
 	string "Driver name"
-	depends on GPIO_TM4C123_F1
-	default "GPIO_F1"
+	depends on GPIO_TM4C123_PORTA
+	default "GPIOA"
 
-config GPIO_TM4C123_F1_IRQ_PRI
-	int "GPIO F1 interrupt priority"
-	depends on GPIO_TM4C123_F1
+config TM4C123_GPIOA_IRQ_PRI
+	int "GPIOA interrupt priority"
+	depends on GPIO_TM4C123_PORTA
 	range 0 5
 	default 1
 	help
-	  TM4C123 GPIO F1 IRQ priority.
+	  TM4C123 GPIOA IRQ priority.
 
-config GPIO_TM4C123_F2
-	bool "GPIO block F2"
+config GPIO_TM4C123_PORTB
+	bool "GPIO block B"
 	depends on GPIO_TM4C123
 	default n
 	help
-	  Include support for the GPIO port F2.
+	  Include support for the GPIO port B.
 
-config GPIO_TM4C123_F2_NAME
+config TM4C123_GPIOB_NAME
 	string "Driver name"
-	depends on GPIO_TM4C123_F2
-	default "GPIO_F2"
+	depends on GPIO_TM4C123_PORTB
+	default "GPIOB"
 
-config GPIO_TM4C123_F2_IRQ_PRI
-	int "GPIO F2 interrupt priority"
-	depends on GPIO_TM4C123_F2
+config TM4C123_GPIOB_IRQ_PRI
+	int "GPIOB interrupt priority"
+	depends on GPIO_TM4C123_PORTB
 	range 0 5
 	default 1
 	help
-	  TM4C123 GPIO F2 IRQ priority.
+	  TM4C123 GPIOB IRQ priority.
 
-config GPIO_TM4C123_F3
-	bool "GPIO block F3"
+config GPIO_TM4C123_PORTC
+	bool "GPIO block A"
 	depends on GPIO_TM4C123
 	default n
 	help
-	  Include support for the GPIO port F3.
+	  Include support for the GPIO port C.
 
-config GPIO_TM4C123_F3_NAME
+config TM4C123_GPIOC_NAME
 	string "Driver name"
-	depends on GPIO_TM4C123_F3
-	default "GPIO_F3"
+	depends on GPIO_TM4C123_PORTC
+	default "GPIOC"
 
-config GPIO_TM4C123_F3_IRQ_PRI
-	int "GPIO F3 interrupt priority"
-	depends on GPIO_TM4C123_F3
+config TM4C123_GPIOC_IRQ_PRI
+	int "GPIOA interrupt priority"
+	depends on GPIO_TM4C123_PORTC
 	range 0 5
 	default 1
 	help
-	  TM4C123 GPIO F3 IRQ priority.
+	  TM4C123 GPIOC IRQ priority.
 
-config GPIO_TM4C123_F0
-	bool "GPIO block F0"
+config GPIO_TM4C123_PORTD
+	bool "GPIO block D"
 	depends on GPIO_TM4C123
 	default n
 	help
-	  Include support for the GPIO port F0.
+	  Include support for the GPIO port D.
 
-config GPIO_TM4C123_F0_NAME
+config TM4C123_GPIOD_NAME
 	string "Driver name"
-	depends on GPIO_TM4C123_F0
-	default "GPIO_F0"
+	depends on GPIO_TM4C123_PORTD
+	default "GPIOD"
 
-config GPIO_TM4C123_F0_IRQ_PRI
-	int "GPIO F0 interrupt priority"
-	depends on GPIO_TM4C123_F0
+config TM4C123_GPIOD_IRQ_PRI
+	int "GPIOD interrupt priority"
+	depends on GPIO_TM4C123_PORTD
 	range 0 5
 	default 1
 	help
-	  TM4C123 GPIO F0 IRQ priority.
+	  TM4C123 GPIOD IRQ priority.
 
-config GPIO_TM4C123_F4
-	bool "GPIO block F4"
+config GPIO_TM4C123_PORTE
+	bool "GPIO block E"
 	depends on GPIO_TM4C123
 	default n
 	help
-	  Include support for the GPIO port F4.
+	  Include support for the GPIO port E.
 
-config GPIO_TM4C123_F4_NAME
+config TM4C123_GPIOE_NAME
 	string "Driver name"
-	depends on GPIO_TM4C123_F4
-	default "GPIO_F4"
+	depends on GPIO_TM4C123_PORTE
+	default "GPIOE"
 
-config GPIO_TM4C123_F4_IRQ_PRI
-	int "GPIO F4 interrupt priority"
-	depends on GPIO_TM4C123_F4
+config TM4C123_GPIOE_IRQ_PRI
+	int "GPIOA interrupt priority"
+	depends on GPIO_TM4C123_PORTE
 	range 0 5
 	default 1
 	help
-	  TM4C123 GPIO F4 IRQ priority.
+	  TM4C123 GPIOE IRQ priority.
+
+config GPIO_TM4C123_PORTF
+	bool "GPIO block F"
+	depends on GPIO_TM4C123
+	default n
+	help
+	  Include support for the GPIO port F.
+
+config TM4C123_GPIOF_NAME
+	string "Driver name"
+	depends on GPIO_TM4C123_PORTF
+	default "GPIOF"
+
+config TM4C123_GPIOF_IRQ_PRI
+	int "GPIOA interrupt priority"
+	depends on GPIO_TM4C123_PORTF
+	range 0 5
+	default 1
+	help
+	  TM4C123 GPIOF IRQ priority.
+
+config GPIO_TM4C123_PORTG
+	bool "GPIO block G"
+	depends on GPIO_TM4C123
+	default n
+	help
+	  Include support for the GPIO port G.
+
+config TM4C123_GPIOG_NAME
+	string "Driver name"
+	depends on GPIO_TM4C123_PORTG
+	default "GPIOG"
+
+config TM4C123_GPIOG_IRQ_PRI
+	int "GPIOA interrupt priority"
+	depends on GPIO_TM4C123_PORTG
+	range 0 5
+	default 1
+	help
+	  TM4C123 GPIOG IRQ priority.
+
+config GPIO_TM4C123_PORTH
+	bool "GPIO block H"
+	depends on GPIO_TM4C123
+	default n
+	help
+	  Include support for the GPIO port H.
+
+config TM4C123_GPIOH_NAME
+	string "Driver name"
+	depends on GPIO_TM4C123_PORTH
+	default "GPIOH"
+
+config TM4C123_GPIOH_IRQ_PRI
+	int "GPIOA interrupt priority"
+	depends on GPIO_TM4C123_PORTH
+	range 0 5
+	default 1
+	help
+	  TM4C123 GPIOH IRQ priority.
 
 endif # GPIO_TM4C123

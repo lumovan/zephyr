@@ -25,69 +25,62 @@
 
 #define _usleep(usec) k_busy_wait(usec)
 
-static struct dw1000_gpio_configuration dw1000_gpios[DW1000_GPIO_IDX_MAX] = {
-    // {
-    //     .dev = NULL,
-    //     .pin = CONFIG_DW1000_GPIO_IDX_ISR_PIN,
-    // },
-    // {
-    //     .dev = NULL,
-    //     .pin = CONFIG_DW1000_GPIO_IDX_WAKEUP_PIN,
-    // },
-    // {
-    //     .dev = NULL,
-    //     .pin = CONFIG_DW1000_GPIO_IDX_RST_PIN,
-    // },
-    // {
-    //     .dev = NULL,
-    //     .pin = CONFIG_DW1000_GPIO_IDX_EXTON_PIN,
-    // },
-    // {
-    //     .dev = NULL,
-    //     .pin = CONFIG_DW1000_GPIO_IDX_GPIO_5_PIN, /* SPI POL */
-    // },
-    // {
-    //     .dev = NULL,
-    //     .pin = CONFIG_DW1000_GPIO_IDX_GPIO_6_PIN, /* SPI PHA */
-    // },
-};
-
-struct dw1000_gpio_configuration* dw1000_configure_gpios(void)
+bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
+    u16_t index, void* data, size_t length)
 {
-    const int flags_noint_out = GPIO_DIR_OUT;
-    struct device* gpio;
+    u8_t header[3];
+    u8_t cmd_buf[2];
+    int cnt = 0;
+    struct spi_buf_set tx = {
+        .buffers = buf,
+    };
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_ISR_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_ISR].pin,
-        flags_noint_out);
-    dw1000_gpios[DW1000_GPIO_IDX_ISR].dev = gpio;
+    if (reg_num > 0x3F) {
+        return -ENOTSUP;
+    }
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_WAKEUP_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_WAKEUP].pin,
-        flags_noint_out);
-    dw1000_gpios[DW1000_GPIO_IDX_WAKEUP].dev = gpio;
+    if (index == 0) {
+        header[cnt++] = 0x80 | reg_num;
+    } else {
+        if (index > 0x7fff) {
+            return -ENOTSUP;
+        }
+        if ((index + length) > 0x7fff) {
+            return -ENOTSUP;
+        }
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_RST_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_RST].pin,
-        flags_noint_out);
-    dw1000_gpios[DW1000_GPIO_IDX_RST].dev = gpio;
+        if (read) {
+            header[cnt++] = 0x40 | reg_num;
+        }else{
+            header[cnt++] = 0xc0 | reg_num;
+        }
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_EXTON_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_EXTON].pin,
-        flags_noint_out);
-    dw1000_gpios[DW1000_GPIO_IDX_EXTON].dev = gpio;
+        if (index < 127) {
+            header[cnt++] = 0xc0 | reg_num;
+        } else {
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_GPIO_5_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_GPIO_5].pin,
-        flags_noint_out);
-    dw1000_gpios[DW1000_GPIO_IDX_GPIO_5].dev = gpio;
+            header[cnt++] = 0x80 | (u8_t)index;
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_GPIO_6_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_GPIO_6].pin,
-        flags_noint_out);
-    dw1000_gpios[DW1000_GPIO_IDX_GPIO_6].dev = gpio;
+            if (read) {
+                header[cnt++] = 0xc0 | (u8_t)(index >> 7);
+            }else{
+                header[cnt++] = (u8_t)(index >> 7);
+            }
+        }
+    }
 
-    return dw1000_gpios;
+    tx.count = cnt;
+
+    if (read) {
+        const struct spi_buf_set rx = {
+            .buffers = buf,
+            .count = cnt
+        };
+
+        return (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
+    }
+
+    return (spi_write(ctx->spi, &ctx->spi_cfg, &tx) == 0);
 }
 
 static inline int configure_spi(struct device* dev)
@@ -137,7 +130,7 @@ static inline void set_reset(struct device* dev)
     _usleep(2000);
 
     gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_RST_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_RST].pin,
+    gpio_pin_configure(gpio, dw1000->gpios[DW1000_GPIO_IDX_RST].pin,
         GPIO_DIR_IN);
 }
 
@@ -164,7 +157,7 @@ static int power_on_and_setup(struct device* dev)
 
 static enum ieee802154_hw_caps dw1000_get_capabilities(struct device* dev)
 {
-    //return IEEE802154_HW_FCS | IEEE802154_HW_FILTER | IEEE802154_HW_CSMA;
+    return IEEE802154_HW_FCS | IEEE802154_HW_FILTER;
     return 0;
 }
 
@@ -243,6 +236,17 @@ static int dw1000_stop(struct device* dev)
 
 static void dw1000_iface_init(struct net_if* iface)
 {
+    struct ieee802154_context* ctx = net_if_l2_data(iface);
+    static u8_t mac[8] = { 0x00, 0x12, 0x4b, 0x00,
+        0x00, 0x9e, 0xa3, 0xc2 };
+
+    net_if_set_link_addr(iface, mac, 8, NET_LINK_IEEE802154);
+
+    ctx->pan_id = 0xabcd;
+    ctx->channel = 26;
+    ctx->sequence = 62;
+
+    NET_INFO("FAKE ieee802154 iface initialized\n");
 }
 
 static struct dw1000_context dw1000_context_data;

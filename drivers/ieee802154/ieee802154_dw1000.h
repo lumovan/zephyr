@@ -47,6 +47,8 @@ struct dw1000_context {
 /* Registers useful routines
  ***************************
  */
+bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
+    u16_t index, void* data, size_t length);
 
 bool _dw1000_access_reg(struct spi_config* spi, bool read, u8_t addr,
     void* data, size_t length, bool extended, bool burst);

@@ -29,11 +29,14 @@
 #include "gpio_utils.h"
 
 /* Note: Zephyr uses exception numbers, vs the IRQ #s used by the TM4C123 SDK */
-#define EXCEPTION_GPIOF0 30 /* (INT_GPIOF - 16) = (46-16) */
-#define EXCEPTION_GPIOF1 30 /* (INT_GPIOF - 16) = (46-16) */
-#define EXCEPTION_GPIOF2 30 /* (INT_GPIOF - 16) = (46-16) */
-#define EXCEPTION_GPIOF3 30 /* (INT_GPIOF - 16) = (46-16) */
-#define EXCEPTION_GPIOF4 30 /* (INT_GPIOF - 16) = (46-16) */
+#define EXCEPTION_GPIOA 0 /* (INT_GPIOA - 16) = (16-16) */
+#define EXCEPTION_GPIOB 1 /* (INT_GPIOB - 16) = (17-16) */
+#define EXCEPTION_GPIOC 2 /* (INT_GPIOC - 16) = (18-16) */
+#define EXCEPTION_GPIOD 3 /* (INT_GPIOD - 16) = (19-16) */
+#define EXCEPTION_GPIOE 4 /* (INT_GPIOE - 16) = (20-16) */
+#define EXCEPTION_GPIOF 30 /* (INT_GPIOF - 16) = (46-16) */
+#define EXCEPTION_GPIOG 31 /* (INT_GPIOG - 16) = (47-16) */
+#define EXCEPTION_GPIOH 32 /* (INT_GPIOH - 16) = (48-16) */
 
 struct gpio_tm4c123_config {
     /* base address of GPIO port */
@@ -196,162 +199,79 @@ static void gpio_tm4c123_port_isr(void* arg)
     GPIOIntEnable(config->port_base, int_status);
 }
 
-static const struct gpio_driver_api api_funcs = {
+static const struct gpio_driver_api gpio_tm4c123_driver = {
     .config = gpio_tm4c123_config,
     .write = gpio_tm4c123_write,
     .read = gpio_tm4c123_read,
     .manage_callback = gpio_tm4c123_manage_callback,
     .enable_callback = gpio_tm4c123_enable_callback,
     .disable_callback = gpio_tm4c123_disable_callback,
-
 };
 
-#ifdef CONFIG_GPIO_TM4C123_F0
-static const struct gpio_tm4c123_config gpio_tm4c123_f0_config = {
-    .port_base = GPIO_PORTF_BASE,
-    .irq_num = INT_GPIOF,
-};
+#define GPIO_DEVICE_INIT(__name, __suffix, __base_addr, __irq_num)          \
+    static const struct gpio_tm4c123_config gpio_tm4c123_cfg_##__suffix = { \
+        .port_base = __base_addr,                                           \
+        .irq_num = __irq_num,                                               \
+    };                                                                      \
+                                                                            \
+    static struct device DEVICE_NAME_GET(gpio_tm4c123_##__suffix);          \
+    static struct gpio_tm4c123_data gpio_tm4c123_data_##__suffix;           \
+                                                                            \
+    static int gpio_tm4c123_init_##__suffix(struct device* dev)             \
+    {                                                                       \
+        ARG_UNUSED(dev);                                                    \
+                                                                            \
+        IRQ_CONNECT(INT_##__name - 16, CONFIG_TM4C123_##__name##_IRQ_PRI,   \
+            gpio_tm4c123_port_isr, DEVICE_GET(gpio_tm4c123_##__suffix), 0); \
+                                                                            \
+        MAP_IntPendClear(INT_##__name);                                     \
+        irq_enable(INT_##__name - 16);                                      \
+                                                                            \
+        return 0;                                                           \
+    }                                                                       \
+                                                                            \
+    static struct gpio_tm4c123_data gpio_tm4c123_data_##__suffix;           \
+    DEVICE_AND_API_INIT(gpio_tm4c123_##__suffix,                            \
+        CONFIG_TM4C123_##__name##_NAME,                                     \
+        &gpio_tm4c123_init_##__suffix,                                      \
+        &gpio_tm4c123_data_##__suffix,                                      \
+        &gpio_tm4c123_cfg_##__suffix,                                       \
+        POST_KERNEL,                                                        \
+        CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,                                \
+        &gpio_tm4c123_driver);
 
-static struct device DEVICE_NAME_GET(gpio_tm4c123_f0);
-static struct gpio_tm4c123_data gpio_tm4c123_f0_data;
+#define GPIO_DEVICE_INIT_TM4C123(__suffix, __SUFFIX) \
+    GPIO_DEVICE_INIT(GPIO##__SUFFIX, __suffix,       \
+        GPIO_PORT##__SUFFIX##_BASE, INT_GPIO##__SUFFIX)
 
-static int gpio_tm4c123_f0_init(struct device* dev)
-{
-    ARG_UNUSED(dev);
+#ifdef CONFIG_GPIO_TM4C123_PORTA
+GPIO_DEVICE_INIT_TM4C123(a, A);
+#endif /* CONFIG_GPIO_TM4C123_PORTA */
 
-    IRQ_CONNECT(EXCEPTION_GPIOF0, CONFIG_GPIO_TM4C123_F0_IRQ_PRI,
-        gpio_tm4c123_port_isr, DEVICE_GET(gpio_tm4c123_f0), 0);
+#ifdef CONFIG_GPIO_TM4C123_PORTB
+GPIO_DEVICE_INIT_TM4C123(b, B);
+#endif /* CONFIG_GPIO_TM4C123_PORTB */
 
-    MAP_IntPendClear(INT_GPIOF);
-    irq_enable(EXCEPTION_GPIOF0);
+#ifdef CONFIG_GPIO_TM4C123_PORTC
+GPIO_DEVICE_INIT_TM4C123(c, C);
+#endif /* CONFIG_GPIO_TM4C123_PORTC */
 
-    return 0;
-}
+#ifdef CONFIG_GPIO_TM4C123_PORTD
+GPIO_DEVICE_INIT_TM4C123(d, D);
+#endif /* CONFIG_GPIO_TM4C123_PORTD */
 
-DEVICE_AND_API_INIT(gpio_tm4c123_f0, CONFIG_GPIO_TM4C123_F0_NAME,
-    &gpio_tm4c123_f0_init, &gpio_tm4c123_f0_data,
-    &gpio_tm4c123_f0_config,
-    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-    &api_funcs);
+#ifdef CONFIG_GPIO_TM4C123_PORTE
+GPIO_DEVICE_INIT_TM4C123(e, E);
+#endif /* CONFIG_GPIO_TM4C123_PORTE */
 
-#endif
+#ifdef CONFIG_GPIO_TM4C123_PORTF
+GPIO_DEVICE_INIT_TM4C123(f, F);
+#endif /* CONFIG_GPIO_TM4C123_PORTF */
 
-#ifdef CONFIG_GPIO_TM4C123_F1
-static const struct gpio_tm4c123_config gpio_tm4c123_f1_config = {
-    .port_base = GPIO_PORTF_BASE,
-    .irq_num = INT_GPIOF,
-};
+#ifdef CONFIG_GPIO_TM4C123_PORTG
+GPIO_DEVICE_INIT_TM4C123(g, G);
+#endif /* CONFIG_GPIO_TM4C123_PORTG */
 
-static struct device DEVICE_NAME_GET(gpio_tm4c123_f1);
-static struct gpio_tm4c123_data gpio_tm4c123_f1_data;
-
-static int gpio_tm4c123_f1_init(struct device* dev)
-{
-    ARG_UNUSED(dev);
-
-    IRQ_CONNECT(EXCEPTION_GPIOF1, CONFIG_GPIO_TM4C123_F1_IRQ_PRI,
-        gpio_tm4c123_port_isr, DEVICE_GET(gpio_tm4c123_f1), 0);
-
-    MAP_IntPendClear(INT_GPIOF);
-    irq_enable(EXCEPTION_GPIOF1);
-
-    return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_tm4c123_f1, CONFIG_GPIO_TM4C123_F1_NAME,
-    &gpio_tm4c123_f1_init, &gpio_tm4c123_f1_data,
-    &gpio_tm4c123_f1_config,
-    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-    &api_funcs);
-
-#endif /* CONFIG_GPIO_TM4C123_F1 */
-
-#ifdef CONFIG_GPIO_TM4C123_F2
-static const struct gpio_tm4c123_config gpio_tm4c123_f2_config = {
-    .port_base = GPIO_PORTF_BASE,
-    .irq_num = INT_GPIOF,
-};
-
-static struct device DEVICE_NAME_GET(gpio_tm4c123_f2);
-static struct gpio_tm4c123_data gpio_tm4c123_f2_data;
-
-static int gpio_tm4c123_f2_init(struct device* dev)
-{
-    ARG_UNUSED(dev);
-
-    IRQ_CONNECT(EXCEPTION_GPIOF2, CONFIG_GPIO_TM4C123_F2_IRQ_PRI,
-        gpio_tm4c123_port_isr, DEVICE_GET(gpio_tm4c123_f2), 0);
-
-    MAP_IntPendClear(INT_GPIOF);
-    irq_enable(EXCEPTION_GPIOF2);
-
-    return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_tm4c123_f2, CONFIG_GPIO_TM4C123_F2_NAME,
-    &gpio_tm4c123_f2_init, &gpio_tm4c123_f2_data,
-    &gpio_tm4c123_f2_config,
-    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-    &api_funcs);
-
-#endif
-
-#ifdef CONFIG_GPIO_TM4C123_F3
-static const struct gpio_tm4c123_config gpio_tm4c123_f3_config = {
-    .port_base = GPIO_PORTF_BASE,
-    .irq_num = INT_GPIOF,
-};
-
-static struct device DEVICE_NAME_GET(gpio_tm4c123_f3);
-static struct gpio_tm4c123_data gpio_tm4c123_f3_data;
-
-static int gpio_tm4c123_f3_init(struct device* dev)
-{
-    ARG_UNUSED(dev);
-
-    IRQ_CONNECT(EXCEPTION_GPIOF3, CONFIG_GPIO_TM4C123_F3_IRQ_PRI,
-        gpio_tm4c123_port_isr, DEVICE_GET(gpio_tm4c123_f3), 0);
-
-    MAP_IntPendClear(INT_GPIOF);
-    irq_enable(EXCEPTION_GPIOF3);
-
-    return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_tm4c123_f3, CONFIG_GPIO_TM4C123_F3_NAME,
-    &gpio_tm4c123_f3_init, &gpio_tm4c123_f3_data,
-    &gpio_tm4c123_f3_config,
-    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-    &api_funcs);
-
-#endif
-
-#ifdef CONFIG_GPIO_TM4C123_F4
-static const struct gpio_tm4c123_config gpio_tm4c123_f4_config = {
-    .port_base = GPIO_PORTF_BASE,
-    .irq_num = INT_GPIOF,
-};
-
-static struct device DEVICE_NAME_GET(gpio_tm4c123_f4);
-static struct gpio_tm4c123_data gpio_tm4c123_f4_data;
-
-static int gpio_tm4c123_f4_init(struct device* dev)
-{
-    ARG_UNUSED(dev);
-
-    IRQ_CONNECT(EXCEPTION_GPIOF4, CONFIG_GPIO_TM4C123_F4_IRQ_PRI,
-        gpio_tm4c123_port_isr, DEVICE_GET(gpio_tm4c123_f4), 0);
-
-    MAP_IntPendClear(INT_GPIOF);
-    irq_enable(EXCEPTION_GPIOF4);
-
-    return 0;
-}
-
-DEVICE_AND_API_INIT(gpio_tm4c123_f4, CONFIG_GPIO_TM4C123_F4_NAME,
-    &gpio_tm4c123_f4_init, &gpio_tm4c123_f4_data,
-    &gpio_tm4c123_f4_config,
-    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
-    &api_funcs);
-
-#endif
+#ifdef CONFIG_GPIO_TM4C123_PORTH
+GPIO_DEVICE_INIT_TM4C123(h, H);
+#endif /* CONFIG_GPIO_TM4C123_PORTH */
