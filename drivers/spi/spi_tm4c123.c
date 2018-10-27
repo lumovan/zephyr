@@ -5,6 +5,7 @@
  */
 
 #define SYS_LOG_LEVEL CONFIG_SYS_LOG_SPI_LEVEL
+#define SYS_LOG_DOMAIN "dev/spi"
 #include <logging/sys_log.h>
 
 #include <board.h>
@@ -31,7 +32,7 @@
     ((const struct spi_tm4c123_config* const)(dev->config->config_info))
 
 #define DEV_DATA(dev) \
-    ((struct spi_tm4c123_data* const)(dev->driver_data))
+    ((struct spi_tm4c123_data * const)(dev->driver_data))
 
 static bool spi_tm4c123_transfer_ongoing(struct spi_tm4c123_data* data)
 {
@@ -201,6 +202,9 @@ static int spi_tm4c123_configure(struct device* dev, const struct spi_config* co
     data->ctx.config = config;
 
     spi_context_cs_configure(&data->ctx);
+
+    SYS_LOG_DBG("tm4c123 set base:%x, protocol:%d, mode:%d, bit_rate:%d, word_size:%d",
+        cfg->spi_base, protocol, mode, bit_rate, (SPI_WORD_SIZE_GET(config->operation)));
 
     MAP_SSIConfigSetExpClk(cfg->spi_base, cfg->spi_clk,
         protocol, mode, bit_rate, (SPI_WORD_SIZE_GET(config->operation)));

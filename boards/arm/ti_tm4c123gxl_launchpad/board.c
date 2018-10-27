@@ -38,8 +38,9 @@ static struct dw1000_gpio_configuration dw1000_gpios[DW1000_GPIO_IDX_MAX] = {
 
 struct dw1000_gpio_configuration* dw1000_configure_gpios(void)
 {
-    const int flags_noint_out = GPIO_DIR_OUT;
     struct device* gpio;
+    const int flags_int_in = (GPIO_DIR_IN | GPIO_INT
+        | GPIO_INT_EDGE | GPIO_INT_ACTIVE_HIGH | GPIO_INT_DEBOUNCE);
 
     gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_ISR_DRV_NAME);
     dw1000_gpios[DW1000_GPIO_IDX_ISR].dev = gpio;
@@ -52,6 +53,11 @@ struct dw1000_gpio_configuration* dw1000_configure_gpios(void)
 
     gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_EXTON_DRV_NAME);
     dw1000_gpios[DW1000_GPIO_IDX_EXTON].dev = gpio;
+
+    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_ISR_DRV_NAME);
+    dw1000_gpios[DW1000_GPIO_IDX_ISR].dev = gpio;
+    gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_ISR].pin,
+        flags_int_in);
 
     gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_GPIO_5_DRV_NAME);
     dw1000_gpios[DW1000_GPIO_IDX_GPIO_5].dev = gpio;

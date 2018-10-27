@@ -145,7 +145,7 @@ int pinmux_initialize(struct device* port)
 #ifdef CONFIG_IEEE802154_DW1000
     /* Configure the GPIO Pin Mux for PB3 for DW1000 IRQ */
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTB_BASE, GPIO_PIN_3);
-    MAP_GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    MAP_GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPD);
 
     /* Configure the GPIO Pin Mux for PB2 for DW1000 SPI_PHA */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, GPIO_PIN_2);
@@ -153,6 +153,7 @@ int pinmux_initialize(struct device* port)
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_0);
     /* Configure the GPIO Pin Mux for PE3 for DW1000 RST */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_3);
+    MAP_GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
     /* Configure the GPIO Pin Mux for PE4 for DW1000 EXTON */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_4);
     /* Configure the GPIO Pin Mux for PE5 for DW1000 WAKEUP */

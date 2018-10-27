@@ -22,8 +22,7 @@ struct dw1000_context {
 	struct net_if *iface;
 	/**************************/
 	struct dw1000_gpio_configuration *gpios;
-	struct gpio_callback sfd_cb;
-	struct gpio_callback fifop_cb;
+	struct gpio_callback isr_cb;
 	struct device *spi;
 	struct spi_config spi_cfg;
 	u8_t mac_addr[8];

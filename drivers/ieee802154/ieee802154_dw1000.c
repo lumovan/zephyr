@@ -1,6 +1,7 @@
 #define SYS_LOG_LEVEL CONFIG_SYS_LOG_IEEE802154_DRIVER_LEVEL
 #define SYS_LOG_DOMAIN "dev/dw1000"
 #include <logging/sys_log.h>
+#include <misc/__assert.h>
 
 #include <errno.h>
 
@@ -25,65 +26,100 @@
 
 #define _usleep(usec) k_busy_wait(usec)
 
+#if defined(CONFIG_IEEE802154_DW1000_GPIO_SPI_CS)
+static struct spi_cs_control cs_ctrl;
+#endif
+
+#if CONFIG_SYS_LOG_IEEE802154_DRIVER_LEVEL == 4
+
+static void _dw1000_print_hex_buffer(char* str, u8_t* buffer, size_t length)
+{
+    SYS_LOG_BACKEND_FN("\t%s: length: %d\tbuffer: ", str, length);
+    for (size_t i = 0; i < length; i++) {
+        SYS_LOG_BACKEND_FN("%02x ", buffer[i]);
+    }
+    SYS_LOG_BACKEND_FN("\n");
+}
+
+#else
+#define _dw1000_print_hex_buffer(...)
+#endif /* CONFIG_SYS_LOG_IEEE802154_DRIVER_LEVEL == 4 */
+
 bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
     u16_t index, void* data, size_t length)
 {
+    bool ret;
     u8_t header[3];
-    u8_t cmd_buf[2];
     int cnt = 0;
+    struct spi_buf buf[2] = {
+        {
+            .buf = header,
+            .len = 0,
+        },
+        {
+            .buf = data,
+            .len = length,
+        }
+    };
     struct spi_buf_set tx = {
         .buffers = buf,
     };
 
-    if (reg_num > 0x3F) {
-        return -ENOTSUP;
+    __ASSERT((reg_num <= 0x3F), "Invalue register id: %d", reg_num);
+    __ASSERT((index <= 0x7fff), "Invalue offset: %d", index);
+    __ASSERT(((index + length) <= 0x7fff), "Invalue offset: %d", index + length);
+
+    if (read) {
+        const struct spi_buf_set rx = {
+            .buffers = buf,
+            .count = 2
+        };
+
+        if (index == 0) {
+            header[cnt++] = reg_num;
+        } else {
+            header[cnt++] = 0x40 | reg_num;
+            if (index <= 127) {
+                header[cnt++] = (u8_t)index;
+            } else {
+                header[cnt++] = 0x80 | (u8_t)(index);
+                header[cnt++] = (u8_t)(index >> 7);
+            }
+        }
+
+        buf[0].len = cnt;
+        tx.count = 1;
+
+        ret = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
+        SYS_LOG_DBG("spi receive:");
+        _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
+        _dw1000_print_hex_buffer("rx_buffer", (u8_t*)buf[1].buf, buf[1].len);
+        return ret;
     }
 
     if (index == 0) {
         header[cnt++] = 0x80 | reg_num;
     } else {
-        if (index > 0x7fff) {
-            return -ENOTSUP;
-        }
-        if ((index + length) > 0x7fff) {
-            return -ENOTSUP;
-        }
-
-        if (read) {
-            header[cnt++] = 0x40 | reg_num;
-        }else{
-            header[cnt++] = 0xc0 | reg_num;
-        }
-
-        if (index < 127) {
-            header[cnt++] = 0xc0 | reg_num;
+        header[cnt++] = 0xC0 | reg_num;
+        if (index <= 127) {
+            header[cnt++] = (u8_t)index;
         } else {
-
-            header[cnt++] = 0x80 | (u8_t)index;
-
-            if (read) {
-                header[cnt++] = 0xc0 | (u8_t)(index >> 7);
-            }else{
-                header[cnt++] = (u8_t)(index >> 7);
-            }
+            header[cnt++] = 0x80 | (u8_t)(index);
+            header[cnt++] = (u8_t)(index >> 7);
         }
     }
 
-    tx.count = cnt;
+    buf[0].len = cnt;
+    tx.count = data ? 2 : 1;
 
-    if (read) {
-        const struct spi_buf_set rx = {
-            .buffers = buf,
-            .count = cnt
-        };
-
-        return (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
-    }
+    SYS_LOG_DBG("spi transmit:");
+    _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
+    _dw1000_print_hex_buffer("tx_buffer", (u8_t*)buf[1].buf, buf[1].len);
 
     return (spi_write(ctx->spi, &ctx->spi_cfg, &tx) == 0);
 }
 
-static inline int configure_spi(struct device* dev)
+static inline int configure_spi(struct device* dev, bool high_speed)
 {
     struct dw1000_context* dw1000 = dev->driver_data;
 
@@ -112,26 +148,38 @@ static inline int configure_spi(struct device* dev)
         CONFIG_IEEE802154_DW1000_GPIO_SPI_CS_PIN);
 #endif /* CONFIG_IEEE802154_DW1000_GPIO_SPI_CS */
 
-    dw1000->spi_cfg.frequency = CONFIG_IEEE802154_DW1000_SPI_FREQ;
-    dw1000->spi_cfg.operation = SPI_WORD_SET(8);
+    if (high_speed)
+        dw1000->spi_cfg.frequency = CONFIG_IEEE802154_DW1000_SPI_FREQ;
+    else
+        dw1000->spi_cfg.frequency = 2000000;
+
+    dw1000->spi_cfg.operation = SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_WORD_SET(8);
     dw1000->spi_cfg.slave = CONFIG_IEEE802154_DW1000_SPI_SLAVE;
 
     return 0;
 }
 
-static inline void set_reset(struct device* dev)
+/* set dw1000 spi default work mode PHA=1 POL=1 */
+static inline void configure_dw1000_spi_mode(struct dw1000_context* dw1000)
 {
-    struct dw1000_context* dw1000 = dev->driver_data;
-    struct device* gpio;
+    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_GPIO_5].dev,
+        dw1000->gpios[DW1000_GPIO_IDX_GPIO_5].pin, 1);
 
+    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_GPIO_6].dev,
+        dw1000->gpios[DW1000_GPIO_IDX_GPIO_6].pin, 1);
+}
+
+static inline void set_reset(struct dw1000_context* dw1000)
+{
     gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
         dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 0);
 
-    _usleep(2000);
+    _usleep(10);
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_RST_DRV_NAME);
-    gpio_pin_configure(gpio, dw1000->gpios[DW1000_GPIO_IDX_RST].pin,
-        GPIO_DIR_IN);
+    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
+        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 1);
+
+    _usleep(2000);
 }
 
 static inline void set_exton(struct device* dev, u32_t value)
@@ -150,8 +198,50 @@ static inline void set_wakeup(struct device* dev, u32_t value)
         dw1000->gpios[DW1000_GPIO_IDX_RST].pin, value);
 }
 
+static inline void isr_int_handler(struct device* port,
+    struct gpio_callback* cb, u32_t pins)
+{
+    // struct dw1000_context* dw1000 = CONTAINER_OF(cb, struct dw1000_context, isr_cb);
+    //TODO: isr, receive or transtive callback
+}
+
+static void enable_isr_interrupt(struct dw1000_context* dw1000,
+    bool enable)
+{
+    if (enable) {
+        gpio_pin_enable_callback(
+            dw1000->gpios[DW1000_GPIO_IDX_ISR].dev,
+            dw1000->gpios[DW1000_GPIO_IDX_ISR].pin);
+    } else {
+        gpio_pin_disable_callback(
+            dw1000->gpios[DW1000_GPIO_IDX_ISR].dev,
+            dw1000->gpios[DW1000_GPIO_IDX_ISR].pin);
+    }
+}
+
+static inline void setup_gpio_callbacks(struct device* dev)
+{
+    struct dw1000_context* dw1000 = dev->driver_data;
+
+    gpio_init_callback(&dw1000->isr_cb, isr_int_handler,
+        BIT(dw1000->gpios[DW1000_GPIO_IDX_ISR].pin));
+    gpio_add_callback(dw1000->gpios[DW1000_GPIO_IDX_ISR].dev,
+        &dw1000->isr_cb);
+}
+
 static int power_on_and_setup(struct device* dev)
 {
+    struct dw1000_context* dw1000 = dev->driver_data;
+
+    set_reset(dw1000);
+
+    if (read_register_device_id(dw1000) != (u32_t)0xDECA0130) {
+        SYS_LOG_ERR("Read device id value not correct");
+        return -EIO;
+    }
+
+    setup_gpio_callbacks(dev);
+
     return 0;
 }
 
@@ -202,7 +292,9 @@ static int dw1000_init(struct device* dev)
         return -EIO;
     }
 
-    if (configure_spi(dev) != 0) {
+    configure_dw1000_spi_mode(dw1000);
+
+    if (configure_spi(dev, false) != 0) {
         SYS_LOG_ERR("Configuring SPI failed");
         return -EIO;
     }
@@ -211,6 +303,11 @@ static int dw1000_init(struct device* dev)
 
     if (power_on_and_setup(dev) != 0) {
         SYS_LOG_ERR("Configuring DW1000 failed");
+        return -EIO;
+    }
+
+    if (configure_spi(dev, true) != 0) {
+        SYS_LOG_ERR("Configuring SPI failed");
         return -EIO;
     }
 
@@ -226,6 +323,9 @@ static int dw1000_init(struct device* dev)
 
 static int dw1000_start(struct device* dev)
 {
+    struct dw1000_context* dw1000 = dev->driver_data;
+
+    enable_isr_interrupt(dw1000, true);
     return 0;
 }
 
