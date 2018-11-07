@@ -91,7 +91,7 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
         tx.count = 1;
 
         ret = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
-        SYS_LOG_DBG("spi receive:");
+        SYS_LOG_DBG("spi receive: tx_addr:%p, rx_addr:%p", &tx, &rx);
         _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
         _dw1000_print_hex_buffer("rx_buffer", (u8_t*)buf[1].buf, buf[1].len);
         return ret;
@@ -235,14 +235,73 @@ static int power_on_and_setup(struct device* dev)
 
     set_reset(dw1000);
 
-    if (read_register_device_id(dw1000) != (u32_t)0xDECA0130) {
-        SYS_LOG_ERR("Read device id value not correct");
-        return -EIO;
-    }
+    // if (read_register_device_id(dw1000) != (u32_t)0xDECA0130) {
+    //     SYS_LOG_ERR("Read device id value not correct");
+    //     return -EIO;
+    // }
 
     setup_gpio_callbacks(dev);
 
     return 0;
+}
+
+static int _dw1000_set_pan_id(struct device* dev, u16_t pan_id)
+{
+    struct dw1000_context* dw1000 = dev->driver_data;
+
+    SYS_LOG_DBG("0x%x", pan_id);
+
+    pan_id = sys_le16_to_cpu(pan_id);
+
+    if (!write_reg_pan_id(dw1000, pan_id)) {
+        SYS_LOG_ERR("Failed");
+        return -EIO;
+    }
+
+    return 0;
+}
+
+static int _dw1000_set_short_addr(struct device* dev, u16_t short_addr)
+{
+    struct dw1000_context* dw1000 = dev->driver_data;
+
+    SYS_LOG_DBG("0x%x", short_addr);
+
+    short_addr = sys_le16_to_cpu(short_addr);
+
+    if (!write_reg_short_address(dw1000, short_addr)) {
+        SYS_LOG_ERR("Failed");
+        return -EIO;
+    }
+
+    return 0;
+}
+
+static int _dw1000_set_ieee_addr(struct device* dev, const u8_t* ieee_addr)
+{
+    return 0;
+}
+
+static int dw1000_filter(struct device* dev,
+    bool set,
+    enum ieee802154_filter_type type,
+    const struct ieee802154_filter* filter)
+{
+    SYS_LOG_DBG("Applying filter %u", type);
+
+    if (!set) {
+        return -ENOTSUP;
+    }
+
+    if (type == IEEE802154_FILTER_TYPE_IEEE_ADDR) {
+        return _dw1000_set_ieee_addr(dev, filter->ieee_addr);
+    } else if (type == IEEE802154_FILTER_TYPE_SHORT_ADDR) {
+        return _dw1000_set_short_addr(dev, filter->short_addr);
+    } else if (type == IEEE802154_FILTER_TYPE_PAN_ID) {
+        return _dw1000_set_pan_id(dev, filter->pan_id);
+    }
+
+    return -ENOTSUP;
 }
 
 static enum ieee802154_hw_caps dw1000_get_capabilities(struct device* dev)
@@ -336,15 +395,16 @@ static int dw1000_stop(struct device* dev)
 
 static void dw1000_iface_init(struct net_if* iface)
 {
-    struct ieee802154_context* ctx = net_if_l2_data(iface);
+    struct device* dev = net_if_get_device(iface);
+    struct dw1000_context* dw1000 = dev->driver_data;
     static u8_t mac[8] = { 0x00, 0x12, 0x4b, 0x00,
         0x00, 0x9e, 0xa3, 0xc2 };
 
     net_if_set_link_addr(iface, mac, 8, NET_LINK_IEEE802154);
 
-    ctx->pan_id = 0xabcd;
-    ctx->channel = 26;
-    ctx->sequence = 62;
+    dw1000->iface = iface;
+
+    ieee802154_init(iface);
 
     NET_INFO("FAKE ieee802154 iface initialized\n");
 }
@@ -358,6 +418,7 @@ static struct ieee802154_radio_api dw1000_radio_api = {
     .cca = dw1000_cca,
     .set_channel = dw1000_set_channel,
     .set_txpower = dw1000_set_txpower,
+    .filter = dw1000_filter,
     .tx = dw1000_tx,
     .start = dw1000_start,
     .stop = dw1000_stop,
