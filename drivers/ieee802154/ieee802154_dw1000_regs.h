@@ -83,13 +83,6 @@ extern "C" {
 #define DW1000_REG_3E_ID_RESERVED 0x3E
 #define DW1000_REG_3F_ID_RESERVED 0x3F
 
-/* register offset */
-/* TODO: for test api */
-#define DW1000_DEV_ID_REV (BIT(0) | BIT(1) | BIT(2) | BIT(3))
-#define DW1000_DEV_ID_VER (BIT(4) | BIT(5) | BIT(6) | BIT(7))
-#define DW1000_DEV_ID_MODEL 0xff
-#define DW1000_DEV_ID_RIDTAG 0xffff
-
 #ifdef __cplusplus
 }
 #endif

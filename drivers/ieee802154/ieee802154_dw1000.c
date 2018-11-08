@@ -90,11 +90,11 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
         buf[0].len = cnt;
         tx.count = 1;
 
-        ret = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
-        sys_mem_swap((u8_t*)buf[1].buf, buf[1].len);
         SYS_LOG_DBG("spi receive: tx_addr:%p, rx_addr:%p", &tx, &rx);
         _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
+        ret = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
         _dw1000_print_hex_buffer("rx_buffer", (u8_t*)buf[1].buf, buf[1].len);
+
         return ret;
     }
 
@@ -117,7 +117,6 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
     SYS_LOG_DBG("spi transmit:");
     _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
     _dw1000_print_hex_buffer("tx_buffer", (u8_t*)buf[1].buf, buf[1].len);
-    sys_mem_swap((u8_t*)buf[1].buf, buf[1].len);
     return (spi_write(ctx->spi, &ctx->spi_cfg, &tx) == 0);
 }
 
@@ -279,8 +278,15 @@ static int _dw1000_set_short_addr(struct device* dev, u16_t short_addr)
     return 0;
 }
 
-static int _dw1000_set_ieee_addr(struct device* dev, const u8_t* ieee_addr)
+static int _dw1000_set_ieee_addr(struct device* dev, u8_t* ieee_addr)
 {
+    struct dw1000_context* dw1000 = dev->driver_data;
+
+    if (!write_reg_eui_id_64(dw1000, ieee_addr)) {
+        SYS_LOG_ERR("Failed");
+        return -EIO;
+    }
+
     return 0;
 }
 
@@ -399,8 +405,9 @@ static void dw1000_iface_init(struct net_if* iface)
 {
     struct device* dev = net_if_get_device(iface);
     struct dw1000_context* dw1000 = dev->driver_data;
-    static u8_t mac[8] = { 0x00, 0x12, 0x4b, 0x00,
-        0x00, 0x9e, 0xa3, 0xc2 };
+    static u8_t mac[8];
+
+    read_register_eui_id_64(dw1000, mac);
 
     net_if_set_link_addr(iface, mac, 8, NET_LINK_IEEE802154);
 

@@ -138,12 +138,26 @@ DEFINE_REG_READ_16(short_address, DW1000_PANADR_ID, 0)
 
 DEFINE_REG_READ_32(device_id, DW1000_DEV_ID_ID, 0)
 
+#define DEFINE_REG_READ_MULTI_BYTE(__reg_name, __reg_num, __offset, __length)         \
+    static inline bool read_register_##__reg_name(struct dw1000_context* ctx,         \
+        u8_t* data)                                                                   \
+    {                                                                                 \
+        return _dw1000_read_reg_multi_byte(ctx, __reg_num, __offset, data, __length); \
+    }
+
+DEFINE_REG_READ_MULTI_BYTE(eui_id_64, DW1000_EUI_64_ID, 0, 8)
+DEFINE_REG_READ_MULTI_BYTE(tx_timetamp, DW1000_TX_TIME_ID, 0, 5)
+DEFINE_REG_READ_MULTI_BYTE(rx_timetamp, DW1000_RX_TIME_ID, 0, 5)
+DEFINE_REG_READ_MULTI_BYTE(system_time, DW1000_SYS_TIME_ID, 0, 5)
+
 #define DEFINE_REG_WRITE_8(__reg_name, __reg_num, __offset)               \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \
         u8_t val)                                                         \
     {                                                                     \
         return _dw1000_write_reg_8bit(ctx, __reg_num, __offset, val);     \
     }
+
+DEFINE_REG_WRITE_8(set_tc_pgdealy, DW1000_TX_CAL_ID, 0x0B)
 
 #define DEFINE_REG_WRITE_16(__reg_name, __reg_num, __offset)              \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \
@@ -154,6 +168,8 @@ DEFINE_REG_READ_32(device_id, DW1000_DEV_ID_ID, 0)
 
 DEFINE_REG_WRITE_16(pan_id, DW1000_PANADR_ID, 2)
 DEFINE_REG_WRITE_16(short_address, DW1000_PANADR_ID, 0)
+DEFINE_REG_WRITE_16(tx_antenna_delay, DW1000_TX_ANTD_ID, 0)
+DEFINE_REG_WRITE_16(rx_antenna_delay, DW1000_LDE_IF_ID, 0x1804)
 
 #define DEFINE_REG_WRITE_32(__reg_name, __reg_num, __offset)              \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \
@@ -162,11 +178,15 @@ DEFINE_REG_WRITE_16(short_address, DW1000_PANADR_ID, 0)
         return _dw1000_write_reg_32bit(ctx, __reg_num, __offset, val);    \
     }
 
+DEFINE_REG_WRITE_32(set_tx_power, DW1000_TX_POWER_ID, 0)
+
 #define DEFINE_REG_WRITE_MULTI_BYTE(__reg_name, __reg_num, __offset, __length)         \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx,              \
         u8_t* data)                                                                    \
     {                                                                                  \
         return _dw1000_write_reg_multi_byte(ctx, __reg_num, __offset, data, __length); \
     }
+
+DEFINE_REG_WRITE_MULTI_BYTE(eui_id_64, DW1000_EUI_64_ID, 0, 8)
 
 #endif /* __IEEE802154_dw1000_H__ */
