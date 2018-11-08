@@ -91,6 +91,7 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
         tx.count = 1;
 
         ret = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
+        sys_mem_swap((u8_t*)buf[1].buf, buf[1].len);
         SYS_LOG_DBG("spi receive: tx_addr:%p, rx_addr:%p", &tx, &rx);
         _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
         _dw1000_print_hex_buffer("rx_buffer", (u8_t*)buf[1].buf, buf[1].len);
@@ -110,12 +111,13 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
     }
 
     buf[0].len = cnt;
-    tx.count = data ? 2 : 1;
+    __ASSERT((data != NULL), "the send data buffer should not be NULL");
+    tx.count = 2;
 
     SYS_LOG_DBG("spi transmit:");
     _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
     _dw1000_print_hex_buffer("tx_buffer", (u8_t*)buf[1].buf, buf[1].len);
-
+    sys_mem_swap((u8_t*)buf[1].buf, buf[1].len);
     return (spi_write(ctx->spi, &ctx->spi_cfg, &tx) == 0);
 }
 

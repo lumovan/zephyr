@@ -67,6 +67,12 @@ static inline bool _dw1000_write_reg_32bit(struct dw1000_context* ctx,
     return _dw1000_access(ctx, false, reg_num, index, &val, 4);
 }
 
+static inline bool _dw1000_write_reg_multi_byte(struct dw1000_context* ctx,
+    u8_t reg_num, u16_t index, u8_t* data, size_t length)
+{
+    return _dw1000_access(ctx, false, reg_num, index, data, length);
+}
+
 static inline u8_t _dw1000_read_reg_8bit(struct dw1000_context* ctx,
     u8_t reg_num, u16_t index)
 {
@@ -85,7 +91,7 @@ static inline u16_t _dw1000_read_reg_16bit(struct dw1000_context* ctx,
     u16_t val;
 
     if (_dw1000_access(ctx, true, reg_num, index, &val, 2)) {
-        return __bswap_16(val);
+        return val;
     }
 
     return 0;
@@ -97,24 +103,28 @@ static inline u32_t _dw1000_read_reg_32bit(struct dw1000_context* ctx,
     u32_t val;
 
     if (_dw1000_access(ctx, true, reg_num, index, &val, 4)) {
-        return __bswap_32(val);
+        return val;
     }
 
     return 0;
 }
 
+static inline bool _dw1000_read_reg_multi_byte(struct dw1000_context* ctx,
+    u8_t reg_num, u16_t index, u8_t* data, size_t length)
+{
+    return _dw1000_access(ctx, true, reg_num, index, data, length);
+}
+
 #define DEFINE_REG_READ_8(__reg_name, __reg_num, __offset)                    \
     static inline u8_t read_register_##__reg_name(struct dw1000_context* ctx) \
     {                                                                         \
-        return _dw1000_read_reg_8bit(struct dw1000_context * ctx,             \
-            u8_t __reg_num, u16_t __offset);                                  \
+        return _dw1000_read_reg_8bit(ctx, __reg_num, __offset);               \
     }
 
 #define DEFINE_REG_READ_16(__reg_name, __reg_num, __offset)                    \
     static inline u16_t read_register_##__reg_name(struct dw1000_context* ctx) \
     {                                                                          \
-        return _dw1000_read_reg_16bit(ctx,                                     \
-            __reg_num, __offset);                                              \
+        return _dw1000_read_reg_16bit(ctx, __reg_num, __offset);               \
     }
 
 DEFINE_REG_READ_16(pan_id, DW1000_PANADR_ID, 2)
@@ -123,8 +133,7 @@ DEFINE_REG_READ_16(short_address, DW1000_PANADR_ID, 0)
 #define DEFINE_REG_READ_32(__reg_name, __reg_num, __offset)                    \
     static inline u32_t read_register_##__reg_name(struct dw1000_context* ctx) \
     {                                                                          \
-        return _dw1000_read_reg_32bit(ctx,                                     \
-            __reg_num, __offset);                                              \
+        return _dw1000_read_reg_32bit(ctx, __reg_num, __offset);               \
     }
 
 DEFINE_REG_READ_32(device_id, DW1000_DEV_ID_ID, 0)
@@ -133,16 +142,14 @@ DEFINE_REG_READ_32(device_id, DW1000_DEV_ID_ID, 0)
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \
         u8_t val)                                                         \
     {                                                                     \
-        return _dw1000_write_reg_8bit(ctx, __reg_num,                     \
-            __offset, val);                                               \
+        return _dw1000_write_reg_8bit(ctx, __reg_num, __offset, val);     \
     }
 
 #define DEFINE_REG_WRITE_16(__reg_name, __reg_num, __offset)              \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \
         u16_t val)                                                        \
     {                                                                     \
-        return _dw1000_write_reg_16bit(ctx, __reg_num,                    \
-            __offset, val);                                               \
+        return _dw1000_write_reg_16bit(ctx, __reg_num, __offset, val);    \
     }
 
 DEFINE_REG_WRITE_16(pan_id, DW1000_PANADR_ID, 2)
@@ -152,8 +159,14 @@ DEFINE_REG_WRITE_16(short_address, DW1000_PANADR_ID, 0)
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \
         u32_t val)                                                        \
     {                                                                     \
-        return _dw1000_write_reg_32bit(ctx, __reg_num,                    \
-            __offset, val);                                               \
+        return _dw1000_write_reg_32bit(ctx, __reg_num, __offset, val);    \
+    }
+
+#define DEFINE_REG_WRITE_MULTI_BYTE(__reg_name, __reg_num, __offset, __length)         \
+    static inline bool write_reg_##__reg_name(struct dw1000_context* ctx,              \
+        u8_t* data)                                                                    \
+    {                                                                                  \
+        return _dw1000_write_reg_multi_byte(ctx, __reg_num, __offset, data, __length); \
     }
 
 #endif /* __IEEE802154_dw1000_H__ */
