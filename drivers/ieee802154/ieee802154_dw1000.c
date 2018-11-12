@@ -1,3 +1,11 @@
+/* ieee802154_dw1000.c - DECAWAVE DW1000 device driver */
+
+/*
+ * Copyright (c) 2018 hackin zhao.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #define SYS_LOG_LEVEL CONFIG_SYS_LOG_IEEE802154_DRIVER_LEVEL
 #define SYS_LOG_DOMAIN "dev/dw1000"
 #include <logging/sys_log.h>
@@ -48,47 +56,38 @@ static void _dw1000_print_hex_buffer(char* str, u8_t* buffer, size_t length)
 bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
     u16_t index, void* data, size_t length)
 {
+    __ASSERT((reg_num <= 0x3F), "Invalue register id: %d", reg_num);
+    __ASSERT((index <= 0x7fff), "Invalue offset: %d", index);
+    __ASSERT(((index + length) <= 0x7fff), "Invalue offset: %d", index + length);
+
     bool ret;
-    u8_t header[3];
-    int cnt = 0;
+    uint8_t header[] = {
+            [0] = (!read) << 7 | (0 != index) << 6 | reg_num,
+        [1] = (index > 128) << 7 | (uint8_t)(index),
+        [2] = (uint8_t)(index >> 7)
+    };
+
     struct spi_buf buf[2] = {
         {
             .buf = header,
-            .len = 0,
+            .len = index ? (index > 128 ? 3 : 2) : 1,
         },
         {
             .buf = data,
             .len = length,
         }
     };
+
     struct spi_buf_set tx = {
         .buffers = buf,
+        .count = read ? 1 : 2
     };
-
-    __ASSERT((reg_num <= 0x3F), "Invalue register id: %d", reg_num);
-    __ASSERT((index <= 0x7fff), "Invalue offset: %d", index);
-    __ASSERT(((index + length) <= 0x7fff), "Invalue offset: %d", index + length);
 
     if (read) {
         const struct spi_buf_set rx = {
             .buffers = buf,
             .count = 2
         };
-
-        if (index == 0) {
-            header[cnt++] = reg_num;
-        } else {
-            header[cnt++] = 0x40 | reg_num;
-            if (index <= 127) {
-                header[cnt++] = (u8_t)index;
-            } else {
-                header[cnt++] = 0x80 | (u8_t)(index);
-                header[cnt++] = (u8_t)(index >> 7);
-            }
-        }
-
-        buf[0].len = cnt;
-        tx.count = 1;
 
         SYS_LOG_DBG("spi receive: tx_addr:%p, rx_addr:%p", &tx, &rx);
         _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
@@ -98,21 +97,7 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
         return ret;
     }
 
-    if (index == 0) {
-        header[cnt++] = 0x80 | reg_num;
-    } else {
-        header[cnt++] = 0xC0 | reg_num;
-        if (index <= 127) {
-            header[cnt++] = (u8_t)index;
-        } else {
-            header[cnt++] = 0x80 | (u8_t)(index);
-            header[cnt++] = (u8_t)(index >> 7);
-        }
-    }
-
-    buf[0].len = cnt;
     __ASSERT((data != NULL), "the send data buffer should not be NULL");
-    tx.count = 2;
 
     SYS_LOG_DBG("spi transmit:");
     _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
@@ -154,20 +139,10 @@ static inline int configure_spi(struct device* dev, bool high_speed)
     else
         dw1000->spi_cfg.frequency = 2000000;
 
-    dw1000->spi_cfg.operation = SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_WORD_SET(8);
+    dw1000->spi_cfg.operation = SPI_WORD_SET(8);
     dw1000->spi_cfg.slave = CONFIG_IEEE802154_DW1000_SPI_SLAVE;
 
     return 0;
-}
-
-/* set dw1000 spi default work mode PHA=1 POL=1 */
-static inline void configure_dw1000_spi_mode(struct dw1000_context* dw1000)
-{
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_GPIO_5].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_GPIO_5].pin, 1);
-
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_GPIO_6].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_GPIO_6].pin, 1);
 }
 
 static inline void set_reset(struct dw1000_context* dw1000)
@@ -181,22 +156,6 @@ static inline void set_reset(struct dw1000_context* dw1000)
         dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 1);
 
     _usleep(2000);
-}
-
-static inline void set_exton(struct device* dev, u32_t value)
-{
-    struct dw1000_context* dw1000 = dev->driver_data;
-
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, value);
-}
-
-static inline void set_wakeup(struct device* dev, u32_t value)
-{
-    struct dw1000_context* dw1000 = dev->driver_data;
-
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, value);
 }
 
 static inline void isr_int_handler(struct device* port,
@@ -233,13 +192,18 @@ static inline void setup_gpio_callbacks(struct device* dev)
 static int power_on_and_setup(struct device* dev)
 {
     struct dw1000_context* dw1000 = dev->driver_data;
+    u8_t data = 0xA5;
 
     set_reset(dw1000);
 
-    // if (read_register_device_id(dw1000) != (u32_t)0xDECA0130) {
-    //     SYS_LOG_ERR("Read device id value not correct");
-    //     return -EIO;
-    // }
+    if (read_register_device_id(dw1000) != (u32_t)0xDECA0130) {
+        SYS_LOG_ERR("Read device id value not correct");
+        return -EIO;
+    }
+
+    read_register_device_id(dw1000);
+    _dw1000_read_reg_16bit(dw1000, DW1000_DEV_ID_ID, 0x02);
+    _dw1000_write_reg_multi_byte(dw1000, 0x09, 0x136, &data, 1);
 
     setup_gpio_callbacks(dev);
 
@@ -359,14 +323,10 @@ static int dw1000_init(struct device* dev)
         return -EIO;
     }
 
-    configure_dw1000_spi_mode(dw1000);
-
     if (configure_spi(dev, false) != 0) {
         SYS_LOG_ERR("Configuring SPI failed");
         return -EIO;
     }
-
-    SYS_LOG_DBG("GPIO and SPI configured");
 
     if (power_on_and_setup(dev) != 0) {
         SYS_LOG_ERR("Configuring DW1000 failed");
@@ -415,7 +375,7 @@ static void dw1000_iface_init(struct net_if* iface)
 
     ieee802154_init(iface);
 
-    NET_INFO("FAKE ieee802154 iface initialized\n");
+    NET_INFO("ieee802154 iface initialized\n");
 }
 
 static struct dw1000_context dw1000_context_data;

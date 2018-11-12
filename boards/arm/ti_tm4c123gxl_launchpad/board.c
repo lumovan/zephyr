@@ -20,20 +20,8 @@ static struct dw1000_gpio_configuration dw1000_gpios[DW1000_GPIO_IDX_MAX] = {
         .dev = NULL, .pin = DW1000_GPIO_ISR_PIN,
     },
     {
-        .dev = NULL, .pin = DW1000_GPIO_WAKEUP_PIN,
-    },
-    {
         .dev = NULL, .pin = DW1000_GPIO_RST_PIN,
-    },
-    {
-        .dev = NULL, .pin = DW1000_GPIO_EXTON_PIN,
-    },
-    {
-        .dev = NULL, .pin = DW1000_GPIO_GPIO_5_PIN, /* SPI POL */
-    },
-    {
-        .dev = NULL, .pin = DW1000_GPIO_GPIO_6_PIN, /* SPI PHA */
-    },
+    }
 };
 
 struct dw1000_gpio_configuration* dw1000_configure_gpios(void)
@@ -42,28 +30,13 @@ struct dw1000_gpio_configuration* dw1000_configure_gpios(void)
     const int flags_int_in = (GPIO_DIR_IN | GPIO_INT
         | GPIO_INT_EDGE | GPIO_INT_ACTIVE_HIGH | GPIO_INT_DEBOUNCE);
 
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_ISR_DRV_NAME);
-    dw1000_gpios[DW1000_GPIO_IDX_ISR].dev = gpio;
-
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_WAKEUP_DRV_NAME);
-    dw1000_gpios[DW1000_GPIO_IDX_WAKEUP].dev = gpio;
-
     gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_RST_DRV_NAME);
     dw1000_gpios[DW1000_GPIO_IDX_RST].dev = gpio;
-
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_EXTON_DRV_NAME);
-    dw1000_gpios[DW1000_GPIO_IDX_EXTON].dev = gpio;
 
     gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_ISR_DRV_NAME);
     dw1000_gpios[DW1000_GPIO_IDX_ISR].dev = gpio;
     gpio_pin_configure(gpio, dw1000_gpios[DW1000_GPIO_IDX_ISR].pin,
         flags_int_in);
-
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_GPIO_5_DRV_NAME);
-    dw1000_gpios[DW1000_GPIO_IDX_GPIO_5].dev = gpio;
-
-    gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_GPIO_6_DRV_NAME);
-    dw1000_gpios[DW1000_GPIO_IDX_GPIO_6].dev = gpio;
 
     return dw1000_gpios;
 }

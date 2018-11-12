@@ -29,11 +29,7 @@
 #if defined(CONFIG_IEEE802154_DW1000)
 /* GPIO numbers where the DW1000 chip is connected to */
 #define DW1000_GPIO_ISR_PIN 3
-#define DW1000_GPIO_WAKEUP_PIN 5
 #define DW1000_GPIO_RST_PIN 3
-#define DW1000_GPIO_EXTON_PIN 4
-#define DW1000_GPIO_GPIO_5_PIN 0
-#define DW1000_GPIO_GPIO_6_PIN 2
 #endif /* CONFIG_IEEE802154_DW1000 */
 
 #endif /* __INC_BOARD_H */

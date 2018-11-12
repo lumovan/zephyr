@@ -29,34 +29,6 @@ config IEEE802154_DW1000_GPIO_RST_DRV_NAME
 	  This option is mandatory to set which gpio pin to use in order
 	  to reset the dw1000 device.
 
-config IEEE802154_DW1000_GPIO_WAKEUP_DRV_NAME
-	string "the wakeup pin driver's name to use to access DW1000"
-	default ""
-	help
-	  This option is mandatory to set which gpio pin to use in order
-	  to wakeup dw1000 device.
-
-config IEEE802154_DW1000_GPIO_EXTON_DRV_NAME
-	string "the exton pin driver's name to use to access DW1000"
-	default ""
-	help
-	  This option is mandatory to set which gpio pin to use in order
-	  to receive dw1000 interrupt.
-
-config IEEE802154_DW1000_GPIO_GPIO_5_DRV_NAME
-	string "the spi mode set pin driver's name to use to access DW1000"
-	default ""
-	help
-	  This option is mandatory to set which gpio pin to use in order
-	  to set the dw1000 SPI mode(POL).
-
-config IEEE802154_DW1000_GPIO_GPIO_6_DRV_NAME
-	string "the spi mode set pin driver's name to use to access DW1000"
-	default ""
-	help
-	  This option is mandatory to set which gpio pin to use in order
-	  to set the dw1000 SPI mode(PHA).
-
 if !HAS_DTS_SPI_DEVICE
 
 config IEEE802154_DW1000_SPI_DRV_NAME

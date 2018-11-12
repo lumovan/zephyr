@@ -147,17 +147,19 @@ int pinmux_initialize(struct device* port)
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTB_BASE, GPIO_PIN_3);
     MAP_GPIOPadConfigSet(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPD);
 
-    /* Configure the GPIO Pin Mux for PB2 for DW1000 SPI_PHA */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, GPIO_PIN_2);
-    /* Configure the GPIO Pin Mux for PE0 for DW1000 SPI_POL */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_0);
     /* Configure the GPIO Pin Mux for PE3 for DW1000 RST */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_3);
-    MAP_GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
-    /* Configure the GPIO Pin Mux for PE4 for DW1000 EXTON */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_4);
-    /* Configure the GPIO Pin Mux for PE5 for DW1000 WAKEUP */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_5);
+    //MAP_GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPD);
+    GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_3, 0);
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTE_BASE, GPIO_PIN_3);
+    MAP_GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_ANALOG);
+
+    for (size_t i = 0; i < 10000; i++) {
+        for (size_t j = 0; j < 1000; j++) {
+            /* code */
+        }
+    }
+
 #endif
     return 0;
 }
