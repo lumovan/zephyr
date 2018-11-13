@@ -341,7 +341,6 @@ add_subdirectory(ext)
 add_subdirectory(subsys)
 add_subdirectory(drivers)
 add_subdirectory(tests)
-add_subdirectory(framework)
 
 set(syscall_macros_h ${ZEPHYR_BINARY_DIR}/include/generated/syscall_macros.h)
 
