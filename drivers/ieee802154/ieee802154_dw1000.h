@@ -13,10 +13,6 @@
 #include <linker/sections.h>
 #include <spi.h>
 
-/* Runtime context structure
- ***************************
- */
-
 struct dw1000_context {
 
     struct net_if* iface;
@@ -43,9 +39,6 @@ struct dw1000_context {
 
 #include "ieee802154_dw1000_regs.h"
 
-/* Registers useful routines
- ***************************
- */
 bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
     u16_t index, void* data, size_t length);
 
@@ -121,6 +114,8 @@ static inline bool _dw1000_read_reg_multi_byte(struct dw1000_context* ctx,
         return _dw1000_read_reg_8bit(ctx, __reg_num, __offset);               \
     }
 
+DEFINE_REG_READ_8(set_tc_pgdealy, DW1000_PMSC_ID, 0)
+
 #define DEFINE_REG_READ_16(__reg_name, __reg_num, __offset)                    \
     static inline u16_t read_register_##__reg_name(struct dw1000_context* ctx) \
     {                                                                          \
@@ -158,6 +153,7 @@ DEFINE_REG_READ_MULTI_BYTE(system_time, DW1000_SYS_TIME_ID, 0, 5)
     }
 
 DEFINE_REG_WRITE_8(set_tc_pgdealy, DW1000_TX_CAL_ID, 0x0B)
+DEFINE_REG_WRITE_8(set_tc_pgdealy, DW1000_PMSC_ID, 0)
 
 #define DEFINE_REG_WRITE_16(__reg_name, __reg_num, __offset)              \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \

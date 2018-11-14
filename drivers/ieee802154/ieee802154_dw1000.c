@@ -60,7 +60,6 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
     __ASSERT((index <= 0x7fff), "Invalue offset: %d", index);
     __ASSERT(((index + length) <= 0x7fff), "Invalue offset: %d", index + length);
 
-    bool ret;
     uint8_t header[] = {
             [0] = (!read) << 7 | (0 != index) << 6 | reg_num,
         [1] = (index > 128) << 7 | (uint8_t)(index),
@@ -89,21 +88,15 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
             .count = 2
         };
 
-        SYS_LOG_DBG("spi receive: tx_addr:%p, rx_addr:%p", &tx, &rx);
-        _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
-        ret = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
-        _dw1000_print_hex_buffer("rx_buffer", (u8_t*)buf[1].buf, buf[1].len);
-
-        return ret;
+        return = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
     }
 
     __ASSERT((data != NULL), "the send data buffer should not be NULL");
 
-    SYS_LOG_DBG("spi transmit:");
-    _dw1000_print_hex_buffer("tx_header", (u8_t*)buf[0].buf, buf[0].len);
-    _dw1000_print_hex_buffer("tx_buffer", (u8_t*)buf[1].buf, buf[1].len);
     return (spi_write(ctx->spi, &ctx->spi_cfg, &tx) == 0);
 }
+
+/***************** hardware interface functions ***************************/
 
 static inline int configure_spi(struct device* dev, bool high_speed)
 {
@@ -145,19 +138,6 @@ static inline int configure_spi(struct device* dev, bool high_speed)
     return 0;
 }
 
-static inline void set_reset(struct dw1000_context* dw1000)
-{
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 0);
-
-    _usleep(10);
-
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 1);
-
-    _usleep(2000);
-}
-
 static inline void isr_int_handler(struct device* port,
     struct gpio_callback* cb, u32_t pins)
 {
@@ -189,10 +169,49 @@ static inline void setup_gpio_callbacks(struct device* dev)
         &dw1000->isr_cb);
 }
 
+static inline void set_reset(struct dw1000_context* dw1000)
+{
+    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
+        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 0);
+
+    _usleep(10);
+
+    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
+        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 1);
+
+    _usleep(2000);
+}
+
+/***  dw1000 setup, reset, wakeup, reconfigure, reload functions  ***/
+
+static inline void set_sysclk_XTAL(struct dw1000_context* dw1000)
+{
+    uint8_t reg = (uint8_t)dw1000_read_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, sizeof(uint8_t));
+    reg &= (uint8_t)~PMSC_CTRL0_SYSCLKS_19M & (uint8_t)~PMSC_CTRL0_SYSCLKS_125M;
+    reg |= (uint8_t)PMSC_CTRL0_SYSCLKS_19M;
+    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, reg, sizeof(uint8_t));
+}
+
+static inline void set_soft_reset(struct dw1000_context* dw1000)
+{
+    // Set system clock to XTI
+    dw1000_phy_sysclk_XTAL(dw1000);
+    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL1_OFFSET, PMSC_CTRL1_PKTSEQ_DISABLE, sizeof(uint16_t));
+    dw1000_write_reg(inst, AON_ID, AON_WCFG_OFFSET, 0x0, sizeof(uint16_t));
+    dw1000_write_reg(inst, AON_ID, AON_CFG0_OFFSET, 0x0, sizeof(uint8_t));
+    // Uploads always-on (AON) data array and configuration
+    dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, 0x0, sizeof(uint8_t));
+    dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, AON_CTRL_SAVE, sizeof(uint8_t));
+    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_ALL, sizeof(uint8_t));
+
+    _usleep(10);
+
+    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR, sizeof(uint8_t));
+}
+
 static int power_on_and_setup(struct device* dev)
 {
     struct dw1000_context* dw1000 = dev->driver_data;
-    u8_t data = 0xA5;
 
     set_reset(dw1000);
 
@@ -200,10 +219,6 @@ static int power_on_and_setup(struct device* dev)
         SYS_LOG_ERR("Read device id value not correct");
         return -EIO;
     }
-
-    read_register_device_id(dw1000);
-    _dw1000_read_reg_16bit(dw1000, DW1000_DEV_ID_ID, 0x02);
-    _dw1000_write_reg_multi_byte(dw1000, 0x09, 0x136, &data, 1);
 
     setup_gpio_callbacks(dev);
 
@@ -348,6 +363,7 @@ static int dw1000_init(struct device* dev)
     return 0;
 }
 
+/* dw1000 enter sleep mode */
 static int dw1000_start(struct device* dev)
 {
     struct dw1000_context* dw1000 = dev->driver_data;
@@ -356,6 +372,7 @@ static int dw1000_start(struct device* dev)
     return 0;
 }
 
+/* wakeup dw1000 into idle mode */
 static int dw1000_stop(struct device* dev)
 {
     return 0;
