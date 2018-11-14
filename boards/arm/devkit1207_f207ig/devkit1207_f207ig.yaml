@@ -1,0 +1,12 @@
+identifier: devkit1207_f207ig
+name: DEVKIT1207-F207IG
+type: mcu
+arch: arm
+ram: 128
+flash: 1024
+toolchain:
+  - zephyr
+  - gnuarmemb
+supported:
+  - gpio
+  - spi

@@ -1,0 +1,20 @@
+# Kconfig - DevKit1207 F207IG board configuration
+#
+# Copyright (c) 2018 hackin Zhao
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+if BOARD_DEVKIT1207_F207IG
+
+config BOARD
+	default "devkit1207_f207ig"
+
+if UART_CONSOLE
+
+config UART_STM32_PORT_3
+	default y
+
+endif # UART_CONSOLE
+
+endif # BOARD_DEVKIT1207_F207IG

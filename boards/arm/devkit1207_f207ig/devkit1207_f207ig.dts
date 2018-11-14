@@ -1,0 +1,26 @@
+/*
+ * Copyright (c) 2018 hackin Zhao
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <st/stm32f207.dtsi>
+
+/ {
+	model = "STMicroelectronics DEVKIT1207 F207IG board";
+	compatible = "st,stm32f207ig-devkit1207", "st,stm32f207";
+
+	chosen {
+		zephyr,console = &usart3;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+	};
+};
+
+&usart3 {
+	current-speed = <115200>;
+	pinctrl-2 = <&usart3_pins_c>;
+	pinctrl-names = "default";
+	status = "ok";
+};
