@@ -18,6 +18,9 @@ CONFIG_PINMUX=y
 # enable GPIO
 CONFIG_GPIO=y
 
+# enable SPI_1
+CONFIG_SPI_1=y
+
 # clock configuration
 CONFIG_CLOCK_CONTROL=y
 

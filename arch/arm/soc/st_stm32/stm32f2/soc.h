@@ -13,13 +13,12 @@
  * Chapter 2.2: Memory organization
  */
 
-
 #ifndef _STM32F2_SOC_H_
 #define _STM32F2_SOC_H_
 
-#define GPIO_REG_SIZE         0x400
+#define GPIO_REG_SIZE 0x400
 /* base address for where GPIO registers start */
-#define GPIO_PORTS_BASE       (GPIOA_BASE)
+#define GPIO_PORTS_BASE (GPIOA_BASE)
 
 #ifndef _ASMLANGUAGE
 
@@ -32,14 +31,18 @@
 #include <kernel_includes.h>
 
 #ifdef CONFIG_CLOCK_CONTROL_STM32_CUBE
-#include <stm32f2xx_ll_utils.h>
 #include <stm32f2xx_ll_bus.h>
 #include <stm32f2xx_ll_rcc.h>
 #include <stm32f2xx_ll_system.h>
+#include <stm32f2xx_ll_utils.h>
 #endif /* CONFIG_CLOCK_CONTROL_STM32_CUBE */
 
 #ifdef CONFIG_SERIAL_HAS_DRIVER
 #include <stm32f2xx_ll_usart.h>
+#endif
+
+#ifdef CONFIG_SPI_STM32
+#include <stm32f2xx_ll_spi.h>
 #endif
 
 #endif /* !_ASMLANGUAGE */

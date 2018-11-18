@@ -8,3 +8,6 @@
 config BOARD_DEVKIT1207_F207IG
 	bool "DevKit1207 F207IG Development Board"
 	depends on SOC_STM32F207XG
+	select HAS_DTS_SPI_DEVICE
+	select HAS_DTS_SPI_PINS
+	select HAS_DTS_GPIO_DEVICE
