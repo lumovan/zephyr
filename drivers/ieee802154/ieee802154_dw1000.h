@@ -14,10 +14,10 @@
 #include <spi.h>
 
 struct dw1000_context {
-
     struct net_if* iface;
     /**************************/
-    struct dw1000_gpio_configuration* gpios;
+    struct device* irq_gpio;
+    struct device* reset_gpio;
     struct gpio_callback isr_cb;
     struct device* spi;
     struct spi_config spi_cfg;
@@ -153,7 +153,6 @@ DEFINE_REG_READ_MULTI_BYTE(system_time, DW1000_SYS_TIME_ID, 0, 5)
     }
 
 DEFINE_REG_WRITE_8(set_tc_pgdealy, DW1000_TX_CAL_ID, 0x0B)
-DEFINE_REG_WRITE_8(set_tc_pgdealy, DW1000_PMSC_ID, 0)
 
 #define DEFINE_REG_WRITE_16(__reg_name, __reg_num, __offset)              \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \

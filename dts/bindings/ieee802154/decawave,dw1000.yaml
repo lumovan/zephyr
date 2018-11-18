@@ -27,9 +27,4 @@ properties:
       type: compound
       category: required
       generation: define, use-prop-name
-
-    wakeup-gpios:
-      type: compound
-      category: required
-      generation: define, use-prop-name
 ...

@@ -3,7 +3,7 @@
 
 menuconfig IEEE802154_DW1000
 	bool "DECAWAVE DW1000 Driver support"
-	depends on NETWORKING
+	depends on NETWORKING && SPI
 	select NEWLIB_LIBC
 	default n
 
@@ -15,23 +15,41 @@ config IEEE802154_DW1000_DRV_NAME
 	help
 	  This option sets the driver name
 
-config IEEE802154_DW1000_GPIO_ISR_DRV_NAME
+if !HAS_DTS_GPIO_DEVICE
+
+config IEEE802154_DW1000_GPIO_ISR_NAME
 	string "the interrupt pin driver's name to use to access DW1000"
 	default ""
 	help
 	  This option is mandatory to set which gpio pin to use in order
 	  to receive dw1000 interrupt.
 
-config IEEE802154_DW1000_GPIO_RST_DRV_NAME
+config IEEE802154_DW1000_GPIO_ISR_PIN
+	int "GPIO PIN to use to drive interrupt through"
+	default 0
+	help
+	  This option is mandatory to set which GPIO pin to use in order
+	  to actually emulate the interrupt signal in.
+
+config IEEE802154_DW1000_GPIO_RST_NAME
 	string "the reset pin driver's name to use to access DW1000"
 	default ""
 	help
 	  This option is mandatory to set which gpio pin to use in order
 	  to reset the dw1000 device.
 
+config IEEE802154_DW1000_GPIO_RST_PIN
+	int "GPIO PIN to use to drive reset dw1000 through"
+	default 0
+	help
+	  This option is mandatory to set which GPIO pin to use in order
+	  to actually emulate the reset dw1000 device.
+
+endif # !HAS_DTS_GPIO_DEVICE
+
 if !HAS_DTS_SPI_DEVICE
 
-config IEEE802154_DW1000_SPI_DRV_NAME
+config IEEE802154_DW1000_SPI_NAME
 	string "SPI driver's name to use to access DW1000"
 	default ""
 	help
@@ -64,7 +82,7 @@ config IEEE802154_DW1000_GPIO_SPI_CS
 	  This option is useful if one needs to manage SPI CS through a GPIO
 	  pin to by-pass the SPI controller's CS logic.
 
-config IEEE802154_DW1000_GPIO_SPI_CS_DRV_NAME
+config IEEE802154_DW1000_GPIO_SPI_CS_NAME
 	string "GPIO driver's name to use to drive SPI CS through"
 	default ""
 	depends on IEEE802154_DW1000_GPIO_SPI_CS

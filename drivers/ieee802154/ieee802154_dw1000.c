@@ -27,7 +27,6 @@
 #include <string.h>
 
 #include <gpio.h>
-#include <ieee802154/dw1000.h>
 #include <net/ieee802154_radio.h>
 
 #include "ieee802154_dw1000.h"
@@ -61,7 +60,7 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
     __ASSERT(((index + length) <= 0x7fff), "Invalue offset: %d", index + length);
 
     uint8_t header[] = {
-            [0] = (!read) << 7 | (0 != index) << 6 | reg_num,
+        [0] = (!read) << 7 | (0 != index) << 6 | reg_num,
         [1] = (index > 128) << 7 | (uint8_t)(index),
         [2] = (uint8_t)(index >> 7)
     };
@@ -72,7 +71,7 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
             .len = index ? (index > 128 ? 3 : 2) : 1,
         },
         {
-            .buf = data,
+            .buf = (u8_t*)data,
             .len = length,
         }
     };
@@ -88,7 +87,7 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
             .count = 2
         };
 
-        return = (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
+        return (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
     }
 
     __ASSERT((data != NULL), "the send data buffer should not be NULL");
@@ -97,6 +96,36 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
 }
 
 /***************** hardware interface functions ***************************/
+
+static inline int configure_gpios(struct device* dev)
+{
+    struct dw1000_context* dw1000 = dev->driver_data;
+
+    /* setup gpio for the modem interrupt */
+    dw1000->irq_gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_ISR_NAME);
+    if (dw1000->irq_gpio == NULL) {
+        SYS_LOG_ERR("Failed to get pointer to %s device",
+            CONFIG_IEEE802154_DW1000_GPIO_ISR_NAME);
+        return -EINVAL;
+    }
+
+    gpio_pin_configure(dw1000->irq_gpio,
+        CONFIG_IEEE802154_DW1000_GPIO_ISR_PIN,
+        GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE | GPIO_PUD_PULL_DOWN | GPIO_INT_ACTIVE_HIGH);
+
+    /* setup gpio for the modems reset */
+    dw1000->reset_gpio = device_get_binding(CONFIG_IEEE802154_DW1000_GPIO_RST_NAME);
+    if (dw1000->reset_gpio == NULL) {
+        SYS_LOG_ERR("Failed to get pointer to %s device",
+            CONFIG_IEEE802154_DW1000_GPIO_RST_NAME);
+        return -EINVAL;
+    }
+
+    gpio_pin_configure(dw1000->reset_gpio, CONFIG_IEEE802154_DW1000_GPIO_RST_PIN,
+        GPIO_DIR_OUT);
+
+    return 0;
+}
 
 static inline int configure_spi(struct device* dev, bool high_speed)
 {
@@ -111,7 +140,7 @@ static inline int configure_spi(struct device* dev, bool high_speed)
 
 #if defined(CONFIG_IEEE802154_DW1000_GPIO_SPI_CS)
     cs_ctrl.gpio_dev = device_get_binding(
-        CONFIG_IEEE802154_DW1000_GPIO_SPI_CS_DRV_NAME);
+        CONFIG_IEEE802154_DW1000_GPIO_SPI_CS_NAME);
     if (!cs_ctrl.gpio_dev) {
         SYS_LOG_ERR("Unable to get GPIO SPI CS device");
         return -ENODEV;
@@ -123,7 +152,7 @@ static inline int configure_spi(struct device* dev, bool high_speed)
     dw1000->spi_cfg.cs = &cs_ctrl;
 
     SYS_LOG_DBG("SPI GPIO CS configured on %s:%u",
-        CONFIG_IEEE802154_DW1000_GPIO_SPI_CS_DRV_NAME,
+        CONFIG_IEEE802154_DW1000_GPIO_SPI_CS_NAME,
         CONFIG_IEEE802154_DW1000_GPIO_SPI_CS_PIN);
 #endif /* CONFIG_IEEE802154_DW1000_GPIO_SPI_CS */
 
@@ -149,13 +178,11 @@ static void enable_isr_interrupt(struct dw1000_context* dw1000,
     bool enable)
 {
     if (enable) {
-        gpio_pin_enable_callback(
-            dw1000->gpios[DW1000_GPIO_IDX_ISR].dev,
-            dw1000->gpios[DW1000_GPIO_IDX_ISR].pin);
+        gpio_pin_enable_callback(dw1000->irq_gpio,
+            CONFIG_IEEE802154_DW1000_GPIO_ISR_PIN);
     } else {
-        gpio_pin_disable_callback(
-            dw1000->gpios[DW1000_GPIO_IDX_ISR].dev,
-            dw1000->gpios[DW1000_GPIO_IDX_ISR].pin);
+        gpio_pin_disable_callback(dw1000->irq_gpio,
+            CONFIG_IEEE802154_DW1000_GPIO_ISR_PIN);
     }
 }
 
@@ -164,20 +191,19 @@ static inline void setup_gpio_callbacks(struct device* dev)
     struct dw1000_context* dw1000 = dev->driver_data;
 
     gpio_init_callback(&dw1000->isr_cb, isr_int_handler,
-        BIT(dw1000->gpios[DW1000_GPIO_IDX_ISR].pin));
-    gpio_add_callback(dw1000->gpios[DW1000_GPIO_IDX_ISR].dev,
-        &dw1000->isr_cb);
+        BIT(CONFIG_IEEE802154_DW1000_GPIO_ISR_PIN));
+    gpio_add_callback(dw1000->irq_gpio, &dw1000->isr_cb);
 }
 
 static inline void set_reset(struct dw1000_context* dw1000)
 {
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 0);
+    gpio_pin_write(dw1000->reset_gpio,
+        CONFIG_IEEE802154_DW1000_GPIO_RST_PIN, 0);
 
     _usleep(10);
 
-    gpio_pin_write(dw1000->gpios[DW1000_GPIO_IDX_RST].dev,
-        dw1000->gpios[DW1000_GPIO_IDX_RST].pin, 1);
+    gpio_pin_configure(dw1000->reset_gpio, CONFIG_IEEE802154_DW1000_GPIO_RST_PIN,
+        GPIO_DIR_IN);
 
     _usleep(2000);
 }
@@ -186,27 +212,27 @@ static inline void set_reset(struct dw1000_context* dw1000)
 
 static inline void set_sysclk_XTAL(struct dw1000_context* dw1000)
 {
-    uint8_t reg = (uint8_t)dw1000_read_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, sizeof(uint8_t));
-    reg &= (uint8_t)~PMSC_CTRL0_SYSCLKS_19M & (uint8_t)~PMSC_CTRL0_SYSCLKS_125M;
-    reg |= (uint8_t)PMSC_CTRL0_SYSCLKS_19M;
-    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, reg, sizeof(uint8_t));
+    // uint8_t reg = (uint8_t)dw1000_read_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, sizeof(uint8_t));
+    // reg &= (uint8_t)~PMSC_CTRL0_SYSCLKS_19M & (uint8_t)~PMSC_CTRL0_SYSCLKS_125M;
+    // reg |= (uint8_t)PMSC_CTRL0_SYSCLKS_19M;
+    // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, reg, sizeof(uint8_t));
 }
 
 static inline void set_soft_reset(struct dw1000_context* dw1000)
 {
-    // Set system clock to XTI
-    dw1000_phy_sysclk_XTAL(dw1000);
-    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL1_OFFSET, PMSC_CTRL1_PKTSEQ_DISABLE, sizeof(uint16_t));
-    dw1000_write_reg(inst, AON_ID, AON_WCFG_OFFSET, 0x0, sizeof(uint16_t));
-    dw1000_write_reg(inst, AON_ID, AON_CFG0_OFFSET, 0x0, sizeof(uint8_t));
-    // Uploads always-on (AON) data array and configuration
-    dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, 0x0, sizeof(uint8_t));
-    dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, AON_CTRL_SAVE, sizeof(uint8_t));
-    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_ALL, sizeof(uint8_t));
+    // // Set system clock to XTI
+    // dw1000_phy_sysclk_XTAL(dw1000);
+    // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL1_OFFSET, PMSC_CTRL1_PKTSEQ_DISABLE, sizeof(uint16_t));
+    // dw1000_write_reg(inst, AON_ID, AON_WCFG_OFFSET, 0x0, sizeof(uint16_t));
+    // dw1000_write_reg(inst, AON_ID, AON_CFG0_OFFSET, 0x0, sizeof(uint8_t));
+    // // Uploads always-on (AON) data array and configuration
+    // dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, 0x0, sizeof(uint8_t));
+    // dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, AON_CTRL_SAVE, sizeof(uint8_t));
+    // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_ALL, sizeof(uint8_t));
 
-    _usleep(10);
+    // _usleep(10);
 
-    dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR, sizeof(uint8_t));
+    // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR, sizeof(uint8_t));
 }
 
 static int power_on_and_setup(struct device* dev)
@@ -332,8 +358,7 @@ static int dw1000_init(struct device* dev)
     k_sem_init(&dw1000->rx_lock, 0, 1);
     k_sem_init(&dw1000->tx_sync, 0, 1);
 
-    dw1000->gpios = dw1000_configure_gpios();
-    if (!dw1000->gpios) {
+    if (configure_gpios(dev)) {
         SYS_LOG_ERR("Configuring GPIOS failed");
         return -EIO;
     }
