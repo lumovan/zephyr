@@ -32,6 +32,7 @@
 #include "ieee802154_dw1000.h"
 
 #define _usleep(usec) k_busy_wait(usec)
+#define DW1000_SPI_SPEED_LOW 2000000
 
 #if defined(CONFIG_IEEE802154_DW1000_GPIO_SPI_CS)
 static struct spi_cs_control cs_ctrl;
@@ -127,7 +128,14 @@ static inline int configure_gpios(struct device* dev)
     return 0;
 }
 
-static inline int configure_spi(struct device* dev, bool high_speed)
+static inline void change_spi_speed(struct device* dev, bool high_speed)
+{
+    struct dw1000_context* dw1000 = dev->driver_data;
+    dw1000->spi_cfg.frequency = high_speed ? CONFIG_IEEE802154_DW1000_SPI_FREQ
+                                           : DW1000_SPI_SPEED_LOW;
+}
+
+static inline int configure_spi(struct device* dev)
 {
     struct dw1000_context* dw1000 = dev->driver_data;
 
@@ -156,11 +164,7 @@ static inline int configure_spi(struct device* dev, bool high_speed)
         CONFIG_IEEE802154_DW1000_GPIO_SPI_CS_PIN);
 #endif /* CONFIG_IEEE802154_DW1000_GPIO_SPI_CS */
 
-    if (high_speed)
-        dw1000->spi_cfg.frequency = CONFIG_IEEE802154_DW1000_SPI_FREQ;
-    else
-        dw1000->spi_cfg.frequency = 2000000;
-
+    dw1000->spi_cfg.frequency = DW1000_SPI_SPEED_LOW;
     dw1000->spi_cfg.operation = SPI_WORD_SET(8);
     dw1000->spi_cfg.slave = CONFIG_IEEE802154_DW1000_SPI_SLAVE;
 
@@ -363,7 +367,7 @@ static int dw1000_init(struct device* dev)
         return -EIO;
     }
 
-    if (configure_spi(dev, false) != 0) {
+    if (configure_spi(dev) != 0) {
         SYS_LOG_ERR("Configuring SPI failed");
         return -EIO;
     }
@@ -373,10 +377,7 @@ static int dw1000_init(struct device* dev)
         return -EIO;
     }
 
-    if (configure_spi(dev, true) != 0) {
-        SYS_LOG_ERR("Configuring SPI failed");
-        return -EIO;
-    }
+    change_spi_speed(dev, true);
 
     k_thread_create(&dw1000->dw1000_rx_thread, dw1000->dw1000_rx_stack,
         CONFIG_IEEE802154_DW1000_RX_STACK_SIZE,
