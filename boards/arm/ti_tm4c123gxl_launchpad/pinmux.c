@@ -149,16 +149,9 @@ int pinmux_initialize(struct device* port)
 
     /* Configure the GPIO Pin Mux for PE3 for DW1000 RST */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_3);
-    //MAP_GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPD);
     GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_3, 0);
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTE_BASE, GPIO_PIN_3);
     MAP_GPIOPadConfigSet(GPIO_PORTE_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_ANALOG);
-
-    for (size_t i = 0; i < 10000; i++) {
-        for (size_t j = 0; j < 1000; j++) {
-            /* code */
-        }
-    }
 
 #endif
     return 0;

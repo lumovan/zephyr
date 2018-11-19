@@ -26,10 +26,4 @@
 #define LEDB_GPIO_PORT "GPIOF"
 #define LEDB_GPIO_PIN 2
 
-#if defined(CONFIG_IEEE802154_DW1000)
-/* GPIO numbers where the DW1000 chip is connected to */
-#define DW1000_GPIO_ISR_PIN 3
-#define DW1000_GPIO_RST_PIN 3
-#endif /* CONFIG_IEEE802154_DW1000 */
-
 #endif /* __INC_BOARD_H */
