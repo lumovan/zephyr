@@ -88,7 +88,11 @@ bool _dw1000_access(struct dw1000_context* ctx, bool read, u8_t reg_num,
             .count = 2
         };
 
-        return (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
+        _dw1000_print_hex_buffer("send    header", buf[0].buf, buf[0].len);
+        (spi_transceive(ctx->spi, &ctx->spi_cfg, &tx, &rx) == 0);
+        _dw1000_print_hex_buffer("send *  header", buf[0].buf, buf[0].len);
+        _dw1000_print_hex_buffer("receive buffer", buf[1].buf, buf[1].len);
+        return true;
     }
 
     __ASSERT((data != NULL), "the send data buffer should not be NULL");
@@ -214,34 +218,54 @@ static inline void set_reset(struct dw1000_context* dw1000)
 
 /***  dw1000 setup, reset, wakeup, reconfigure, reload functions  ***/
 
-static inline void set_sysclk_XTAL(struct dw1000_context* dw1000)
+static inline void set_system_clock(struct dw1000_context* dw1000, u8_t clock_mode)
 {
-    // uint8_t reg = (uint8_t)dw1000_read_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, sizeof(uint8_t));
-    // reg &= (uint8_t)~PMSC_CTRL0_SYSCLKS_19M & (uint8_t)~PMSC_CTRL0_SYSCLKS_125M;
-    // reg |= (uint8_t)PMSC_CTRL0_SYSCLKS_19M;
-    // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_OFFSET, reg, sizeof(uint8_t));
+    uint8_t reg = read_register_pmsc_ctrl0_offset_0(dw1000);
+
+    switch (clock_mode) {
+    case DW1000_PMSC_CTRL0_SYSCLKS_AUTO:
+        reg &= (uint8_t)~DW1000_PMSC_CTRL0_SYSCLKS_19M & (uint8_t)~DW1000_PMSC_CTRL0_SYSCLKS_125M;
+        break;
+
+    case DW1000_PMSC_CTRL0_SYSCLKS_19M:
+        reg &= (uint8_t)~DW1000_PMSC_CTRL0_SYSCLKS_19M & (uint8_t)~DW1000_PMSC_CTRL0_SYSCLKS_125M;
+        reg |= (uint8_t)DW1000_PMSC_CTRL0_SYSCLKS_19M;
+        break;
+
+    case DW1000_PMSC_CTRL0_SYSCLKS_125M:
+        reg &= (uint8_t)~DW1000_PMSC_CTRL0_SYSCLKS_19M & (uint8_t)~DW1000_PMSC_CTRL0_SYSCLKS_125M;
+        reg |= (uint8_t)DW1000_PMSC_CTRL0_SYSCLKS_125M;
+        break;
+
+    default:
+        return;
+    }
+
+    write_reg_pmsc_ctrl0_offset_0(dw1000, reg);
 }
 
 static inline void set_soft_reset(struct dw1000_context* dw1000)
 {
-    // // Set system clock to XTI
-    // dw1000_phy_sysclk_XTAL(dw1000);
+    set_system_clock(dw1000, DW1000_PMSC_CTRL0_SYSCLKS_19M);
+    // write_reg_pmsc_ctrl1_offset_0(dw1000, DW1000_PMSC_CTRL1_PKTSEQ_DISABLE);
     // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL1_OFFSET, PMSC_CTRL1_PKTSEQ_DISABLE, sizeof(uint16_t));
     // dw1000_write_reg(inst, AON_ID, AON_WCFG_OFFSET, 0x0, sizeof(uint16_t));
     // dw1000_write_reg(inst, AON_ID, AON_CFG0_OFFSET, 0x0, sizeof(uint8_t));
-    // // Uploads always-on (AON) data array and configuration
+
     // dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, 0x0, sizeof(uint8_t));
     // dw1000_write_reg(inst, AON_ID, AON_CTRL_OFFSET, AON_CTRL_SAVE, sizeof(uint8_t));
-    // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_ALL, sizeof(uint8_t));
+    write_reg_pmsc_ctrl0_offset_0(dw1000, DW1000_PMSC_CTRL0_RESET_ALL);
 
-    // _usleep(10);
+    _usleep(10);
 
-    // dw1000_write_reg(inst, PMSC_ID, PMSC_CTRL0_SOFTRESET_OFFSET, PMSC_CTRL0_RESET_CLEAR, sizeof(uint8_t));
+    write_reg_pmsc_ctrl0_offset_0(dw1000, DW1000_PMSC_CTRL0_RESET_CLEAR);
 }
 
 static int power_on_and_setup(struct device* dev)
 {
     struct dw1000_context* dw1000 = dev->driver_data;
+    u16_t dev_id;
+    u32_t dev_id1;
 
     set_reset(dw1000);
 
@@ -249,6 +273,12 @@ static int power_on_and_setup(struct device* dev)
         SYS_LOG_ERR("Read device id value not correct");
         return -EIO;
     }
+
+    dev_id = _dw1000_read_reg_16bit(dw1000, DW1000_DEV_ID_ID, 2);
+    SYS_LOG_DBG("read device id:0x%x", dev_id);
+
+    dev_id1 = _dw1000_read_reg_32bit(dw1000, DW1000_DEV_ID_ID, 2);
+    SYS_LOG_DBG("read device id:0x%x", dev_id1);
 
     setup_gpio_callbacks(dev);
 
@@ -378,6 +408,9 @@ static int dw1000_init(struct device* dev)
     }
 
     change_spi_speed(dev, true);
+
+    SYS_LOG_DBG("read device high spi speed");
+    _dw1000_read_reg_16bit(dw1000, DW1000_DEV_ID_ID, 2);
 
     k_thread_create(&dw1000->dw1000_rx_thread, dw1000->dw1000_rx_stack,
         CONFIG_IEEE802154_DW1000_RX_STACK_SIZE,

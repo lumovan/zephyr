@@ -114,7 +114,14 @@ static inline bool _dw1000_read_reg_multi_byte(struct dw1000_context* ctx,
         return _dw1000_read_reg_8bit(ctx, __reg_num, __offset);               \
     }
 
-DEFINE_REG_READ_8(set_tc_pgdealy, DW1000_PMSC_ID, 0)
+DEFINE_REG_READ_8(pmsc_ctrl0_offset_0, DW1000_PMSC_ID, 0)
+DEFINE_REG_READ_8(pmsc_ctrl0_offset_1, DW1000_PMSC_ID, 1)
+DEFINE_REG_READ_8(pmsc_ctrl0_offset_2, DW1000_PMSC_ID, 2)
+DEFINE_REG_READ_8(pmsc_ctrl0_offset_3, DW1000_PMSC_ID, 3)
+DEFINE_REG_READ_8(pmsc_ctrl1_offset_0, DW1000_PMSC_ID, 4)
+DEFINE_REG_READ_8(pmsc_ctrl2_offset_1, DW1000_PMSC_ID, 5)
+DEFINE_REG_READ_8(pmsc_ctrl3_offset_2, DW1000_PMSC_ID, 6)
+DEFINE_REG_READ_8(pmsc_ctrl4_offset_3, DW1000_PMSC_ID, 7)
 
 #define DEFINE_REG_READ_16(__reg_name, __reg_num, __offset)                    \
     static inline u16_t read_register_##__reg_name(struct dw1000_context* ctx) \
@@ -153,6 +160,14 @@ DEFINE_REG_READ_MULTI_BYTE(system_time, DW1000_SYS_TIME_ID, 0, 5)
     }
 
 DEFINE_REG_WRITE_8(set_tc_pgdealy, DW1000_TX_CAL_ID, 0x0B)
+DEFINE_REG_WRITE_8(pmsc_ctrl0_offset_0, DW1000_PMSC_ID, 0)
+DEFINE_REG_WRITE_8(pmsc_ctrl0_offset_1, DW1000_PMSC_ID, 1)
+DEFINE_REG_WRITE_8(pmsc_ctrl0_offset_2, DW1000_PMSC_ID, 2)
+DEFINE_REG_WRITE_8(pmsc_ctrl0_offset_3, DW1000_PMSC_ID, 3)
+DEFINE_REG_WRITE_8(pmsc_ctrl1_offset_0, DW1000_PMSC_ID, 4)
+DEFINE_REG_WRITE_8(pmsc_ctrl1_offset_1, DW1000_PMSC_ID, 5)
+DEFINE_REG_WRITE_8(pmsc_ctrl1_offset_2, DW1000_PMSC_ID, 6)
+DEFINE_REG_WRITE_8(pmsc_ctrl1_offset_3, DW1000_PMSC_ID, 7)
 
 #define DEFINE_REG_WRITE_16(__reg_name, __reg_num, __offset)              \
     static inline bool write_reg_##__reg_name(struct dw1000_context* ctx, \
