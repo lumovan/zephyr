@@ -9,8 +9,8 @@
  * @brief Kernel event logger support for ARM
  */
 
-#ifndef __KERNEL_TRACING_H__
-#define __KERNEL_TRACING_H__
+#ifndef ZEPHYR_ARCH_ARM_INCLUDE_TRACING_ARCH_H_
+#define ZEPHYR_ARCH_ARM_INCLUDE_TRACING_ARCH_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,7 @@ extern "C" {
  *
  * @return The key of the interrupt that is currently being processed.
  */
-int _sys_current_irq_key_get(void)
+int z_sys_current_irq_key_get(void)
 {
 	return __get_IPSR();
 }
@@ -34,4 +34,4 @@ int _sys_current_irq_key_get(void)
 }
 #endif
 
-#endif /* __KERNEL_TRACING_H__ */
+#endif /* ZEPHYR_ARCH_ARM_INCLUDE_TRACING_ARCH_H_ */

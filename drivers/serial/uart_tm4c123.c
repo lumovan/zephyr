@@ -55,7 +55,7 @@ static int uart_tm4c123_init(struct device* dev)
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     MAP_UARTConfigSetExpClk((unsigned long)config->base,
         uart_tm4c123_dev_cfg_0.sys_clk_freq,
-        TI_TM4C123_UART_4000C000_CURRENT_SPEED,
+        DT_TI_TM4C123_UART_4000C000_CURRENT_SPEED,
         (UART_CONFIG_PAR_NONE | UART_CONFIG_STOP_ONE | UART_CONFIG_WLEN_8));
 
     MAP_UARTFlowControlSet((unsigned long)config->base,
@@ -68,11 +68,11 @@ static int uart_tm4c123_init(struct device* dev)
     MAP_UARTIntClear((unsigned long)config->base,
         (UART_INT_RX | UART_INT_TX));
 
-    IRQ_CONNECT(TI_TM4C123_UART_4000C000_IRQ_0,
-        TI_TM4C123_UART_4000C000_IRQ_0,
+    IRQ_CONNECT(DT_TI_TM4C123_UART_4000C000_IRQ_0,
+        DT_TI_TM4C123_UART_4000C000_IRQ_0,
         uart_tm4c123_isr, DEVICE_GET(uart_tm4c123_0),
         0);
-    irq_enable(TI_TM4C123_UART_4000C000_IRQ_0);
+    irq_enable(DT_TI_TM4C123_UART_4000C000_IRQ_0);
 
 #endif
 
@@ -88,14 +88,12 @@ static int uart_tm4c123_poll_in(struct device* dev, unsigned char* c)
     return 0;
 }
 
-static unsigned char uart_tm4c123_poll_out(struct device* dev,
+static void uart_tm4c123_poll_out(struct device* dev,
     unsigned char c)
 {
     const struct uart_device_config* config = DEV_CFG(dev);
 
     MAP_UARTCharPut((unsigned long)config->base, c);
-
-    return c;
 }
 
 static int uart_tm4c123_err_check(struct device* dev)

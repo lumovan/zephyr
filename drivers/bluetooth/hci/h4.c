@@ -23,6 +23,7 @@
 #include <bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
+#define LOG_MODULE_NAME bt_driver
 #include "common/log.h"
 
 #include "../util.h"
@@ -37,7 +38,7 @@
 #define H4_SCO  0x03
 #define H4_EVT  0x04
 
-static BT_STACK_NOINIT(rx_thread_stack, CONFIG_BT_RX_STACK_SIZE);
+static K_THREAD_STACK_DEFINE(rx_thread_stack, CONFIG_BT_RX_STACK_SIZE);
 static struct k_thread rx_thread_data;
 
 static struct {
@@ -59,7 +60,7 @@ static struct {
 		u8_t hdr[4];
 	};
 } rx = {
-	.fifo = _K_FIFO_INITIALIZER(rx.fifo),
+	.fifo = Z_FIFO_INITIALIZER(rx.fifo),
 };
 
 static struct {
@@ -67,7 +68,7 @@ static struct {
 	struct net_buf *buf;
 	struct k_fifo   fifo;
 } tx = {
-	.fifo = _K_FIFO_INITIALIZER(tx.fifo),
+	.fifo = Z_FIFO_INITIALIZER(tx.fifo),
 };
 
 static struct device *h4_dev;
@@ -154,9 +155,9 @@ static inline void copy_hdr(struct net_buf *buf)
 static void reset_rx(void)
 {
 	rx.type = H4_NONE;
-	rx.remaining = 0;
+	rx.remaining = 0U;
 	rx.have_hdr = false;
-	rx.hdr_len = 0;
+	rx.hdr_len = 0U;
 	rx.discardable = false;
 }
 
@@ -164,16 +165,11 @@ static struct net_buf *get_rx(int timeout)
 {
 	BT_DBG("type 0x%02x, evt 0x%02x", rx.type, rx.evt.evt);
 
-	if (rx.type == H4_EVT && (rx.evt.evt == BT_HCI_EVT_CMD_COMPLETE ||
-				  rx.evt.evt == BT_HCI_EVT_CMD_STATUS)) {
-		return bt_buf_get_cmd_complete(timeout);
+	if (rx.type == H4_EVT) {
+		return bt_buf_get_evt(rx.evt.evt, rx.discardable, timeout);
 	}
 
-	if (rx.type == H4_ACL) {
-		return bt_buf_get_rx(BT_BUF_ACL_IN, timeout);
-	} else {
-		return bt_buf_get_rx(BT_BUF_EVT, timeout);
-	}
+	return bt_buf_get_rx(BT_BUF_ACL_IN, timeout);
 }
 
 static void rx_thread(void *p1, void *p2, void *p3)
@@ -231,7 +227,7 @@ static size_t h4_discard(struct device *uart, size_t len)
 {
 	u8_t buf[33];
 
-	return uart_fifo_read(uart, buf, min(len, sizeof(buf)));
+	return uart_fifo_read(uart, buf, MIN(len, sizeof(buf)));
 }
 
 static inline void read_payload(void)
@@ -455,7 +451,7 @@ static const struct bt_hci_driver drv = {
 	.send		= h4_send,
 };
 
-static int _bt_uart_init(struct device *unused)
+static int bt_uart_init(struct device *unused)
 {
 	ARG_UNUSED(unused);
 
@@ -469,4 +465,4 @@ static int _bt_uart_init(struct device *unused)
 	return 0;
 }
 
-SYS_INIT(_bt_uart_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+SYS_INIT(bt_uart_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

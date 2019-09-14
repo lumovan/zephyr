@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_MGMT_EVENT)
-#define SYS_LOG_DOMAIN "net/mgmt"
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_mgmt, CONFIG_NET_MGMT_EVENT_LOG_LEVEL);
 
 #include <kernel.h>
 #include <toolchain.h>
@@ -69,7 +67,7 @@ static inline void mgmt_push_event(u32_t mgmt_event, struct net_if *iface,
 			memcpy(events[i_idx].info, info, length);
 			events[i_idx].info_length = length;
 		} else {
-			NET_ERR("Event info length %u > max size %u",
+			NET_ERR("Event info length %zu > max size %zu",
 				length, NET_EVENT_INFO_MAX_SIZE);
 			k_sem_give(&net_mgmt_lock);
 
@@ -87,7 +85,7 @@ static inline void mgmt_push_event(u32_t mgmt_event, struct net_if *iface,
 		u16_t o_idx = out_event + 1;
 
 		if (o_idx == CONFIG_NET_MGMT_EVENT_QUEUE_SIZE) {
-			o_idx = 0;
+			o_idx = 0U;
 		}
 
 		if (events[o_idx].event) {
@@ -125,7 +123,7 @@ static inline struct mgmt_event_entry *mgmt_pop_event(void)
 
 static inline void mgmt_clean_event(struct mgmt_event_entry *mgmt_event)
 {
-	mgmt_event->event = 0;
+	mgmt_event->event = 0U;
 	mgmt_event->iface = NULL;
 }
 
@@ -138,7 +136,7 @@ static inline void mgmt_rebuild_global_event_mask(void)
 {
 	struct net_mgmt_event_callback *cb, *tmp;
 
-	global_event_mask = 0;
+	global_event_mask = 0U;
 
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&event_callbacks, cb, tmp, node) {
 		mgmt_add_event_mask(cb->event_mask);
@@ -183,8 +181,10 @@ static inline void mgmt_run_callbacks(struct mgmt_event_entry *mgmt_event)
 #ifdef CONFIG_NET_MGMT_EVENT_INFO
 		if (mgmt_event->info_length) {
 			cb->info = (void *)mgmt_event->info;
+			cb->info_length = mgmt_event->info_length;
 		} else {
 			cb->info = NULL;
+			cb->info_length = 0;
 		}
 #endif /* CONFIG_NET_MGMT_EVENT_INFO */
 
@@ -217,7 +217,7 @@ static inline void mgmt_run_callbacks(struct mgmt_event_entry *mgmt_event)
 
 #ifdef CONFIG_NET_DEBUG_MGMT_EVENT_STACK
 	net_analyze_stack("Net MGMT event stack",
-			  K_THREAD_STACK_BUFFER(mgmt_stack),
+			  Z_THREAD_STACK_BUFFER(mgmt_stack),
 			  K_THREAD_STACK_SIZEOF(mgmt_stack));
 #endif
 }
@@ -262,10 +262,11 @@ static int mgmt_event_wait_call(struct net_if *iface,
 				u32_t *raised_event,
 				struct net_if **event_iface,
 				const void **info,
+				size_t *info_length,
 				int timeout)
 {
 	struct mgmt_event_wait sync_data = {
-		.sync_call = _K_SEM_INITIALIZER(sync_data.sync_call, 0, 1),
+		.sync_call = Z_SEM_INITIALIZER(sync_data.sync_call, 0, 1),
 	};
 	struct net_mgmt_event_callback sync = {
 		.sync_call = &sync_data.sync_call,
@@ -297,6 +298,10 @@ static int mgmt_event_wait_call(struct net_if *iface,
 #ifdef CONFIG_NET_MGMT_EVENT_INFO
 			if (info) {
 				*info = sync.info;
+
+				if (info_length) {
+					*info_length = sync.info_length;
+				}
 			}
 #endif /* CONFIG_NET_MGMT_EVENT_INFO */
 		}
@@ -349,41 +354,45 @@ int net_mgmt_event_wait(u32_t mgmt_event_mask,
 			u32_t *raised_event,
 			struct net_if **iface,
 			const void **info,
+			size_t *info_length,
 			int timeout)
 {
 	return mgmt_event_wait_call(NULL, mgmt_event_mask,
-				    raised_event, iface, info, timeout);
+				    raised_event, iface, info, info_length,
+				    timeout);
 }
 
 int net_mgmt_event_wait_on_iface(struct net_if *iface,
 				 u32_t mgmt_event_mask,
 				 u32_t *raised_event,
 				 const void **info,
+				 size_t *info_length,
 				 int timeout)
 {
 	NET_ASSERT(NET_MGMT_ON_IFACE(mgmt_event_mask));
 	NET_ASSERT(iface);
 
 	return mgmt_event_wait_call(iface, mgmt_event_mask,
-				    raised_event, NULL, info, timeout);
+				    raised_event, NULL, info, info_length,
+				    timeout);
 }
 
 void net_mgmt_event_init(void)
 {
 	sys_slist_init(&event_callbacks);
-	global_event_mask = 0;
+	global_event_mask = 0U;
 
 	in_event = -1;
 	out_event = -1;
 
-	memset(events, 0,
-	       CONFIG_NET_MGMT_EVENT_QUEUE_SIZE *
-	       sizeof(struct mgmt_event_entry));
+	(void)memset(events, 0, CONFIG_NET_MGMT_EVENT_QUEUE_SIZE *
+			sizeof(struct mgmt_event_entry));
 
 	k_thread_create(&mgmt_thread_data, mgmt_stack,
 			K_THREAD_STACK_SIZEOF(mgmt_stack),
 			(k_thread_entry_t)mgmt_thread, NULL, NULL, NULL,
 			K_PRIO_COOP(CONFIG_NET_MGMT_EVENT_THREAD_PRIO), 0, 0);
+	k_thread_name_set(&mgmt_thread_data, "net_mgmt");
 
 	NET_DBG("Net MGMT initialized: queue of %u entries, stack size of %u",
 		CONFIG_NET_MGMT_EVENT_QUEUE_SIZE,

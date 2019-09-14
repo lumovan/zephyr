@@ -1,18 +1,15 @@
 /*
- * Copyright (c) 2018 Intel Corporation.
+ * Copyright (c) 2019 Intel Corporation.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __TLV320DAC3101_H__
-#define __TLV320DAC3101_H__
+#ifndef ZEPHYR_DRIVERS_AUDIO_TLV320DAC310X_H_
+#define ZEPHYR_DRIVERS_AUDIO_TLV320DAC310X_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* I2C device address of TLV320DAC3101 */
-#define DAC_I2C_DEV_ADDR	(0x30 >> 1)
 
 /* Register addresses */
 #define PAGE_CONTROL_ADDR	0
@@ -158,4 +155,4 @@ enum cm_voltage {
 }
 #endif
 
-#endif /* __TLV320DAC3101_H__ */
+#endif /* ZEPHYR_DRIVERS_AUDIO_TLV320DAC310X_H_ */

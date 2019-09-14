@@ -10,7 +10,7 @@
  *
  *
  * Initialization of full C support: zero the .bss, copy the .data if XIP,
- * call _Cstart().
+ * call z_cstart().
  *
  * Stack is available in this module, but not the global data/bss until their
  * initialization is performed.
@@ -22,6 +22,18 @@
 #include <linker/linker-defs.h>
 #include <kernel_internal.h>
 #include <arch/arm/cortex_m/cmsis.h>
+
+#if defined(__GNUC__)
+/*
+ * GCC can detect if memcpy is passed a NULL argument, however one of
+ * the cases of relocate_vector_table() it is valid to pass NULL, so we
+ * supress the warning for this case.  We need to do this before
+ * string.h is included to get the declaration of memcpy.
+ */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnonnull"
+#endif
+
 #include <string.h>
 
 #ifdef CONFIG_CPU_CORTEX_M_HAS_VTOR
@@ -41,20 +53,25 @@ static inline void relocate_vector_table(void)
 #else
 
 #if defined(CONFIG_SW_VECTOR_RELAY)
-_GENERIC_SECTION(.vt_pointer_section) void *_vector_table_pointer;
+Z_GENERIC_SECTION(.vt_pointer_section) void *_vector_table_pointer;
 #endif
 
 #define VECTOR_ADDRESS 0
+
 void __weak relocate_vector_table(void)
 {
 #if defined(CONFIG_XIP) && (CONFIG_FLASH_BASE_ADDRESS != 0) || \
     !defined(CONFIG_XIP) && (CONFIG_SRAM_BASE_ADDRESS != 0)
 	size_t vector_size = (size_t)_vector_end - (size_t)_vector_start;
-	memcpy(VECTOR_ADDRESS, _vector_start, vector_size);
+	(void)memcpy(VECTOR_ADDRESS, _vector_start, vector_size);
 #elif defined(CONFIG_SW_VECTOR_RELAY)
 	_vector_table_pointer = _vector_start;
 #endif
 }
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 #endif /* CONFIG_CPU_CORTEX_M_HAS_VTOR */
 
@@ -63,7 +80,7 @@ static inline void enable_floating_point(void)
 {
 	/*
 	 * Upon reset, the Co-Processor Access Control Register is 0x00000000.
-	 * Enable CP10 and CP11 coprocessors to enable floating point.
+	 * Enable CP10 and CP11 co-processors to enable floating point.
 	 */
 	SCB->CPACR |= CPACR_CP10_FULL_ACCESS | CPACR_CP11_FULL_ACCESS;
 	/*
@@ -80,7 +97,7 @@ static inline void enable_floating_point(void)
 	 * have first been touched. Perform a dummy move operation so that
 	 * the stack frames are created as expected before any thread
 	 * context switching can occur. It has to be surrounded by instruction
-	 * synchronisation barriers to ensure that the whole sequence is
+	 * synchronization barriers to ensure that the whole sequence is
 	 * serialized.
 	 */
 	__asm__ volatile(
@@ -95,7 +112,7 @@ static inline void enable_floating_point(void)
 }
 #endif
 
-extern FUNC_NORETURN void _Cstart(void);
+extern FUNC_NORETURN void z_cstart(void);
 /**
  *
  * @brief Prepare to and run C code
@@ -105,6 +122,8 @@ extern FUNC_NORETURN void _Cstart(void);
  * @return N/A
  */
 
+extern void z_IntLibInit(void);
+
 #ifdef CONFIG_BOOT_TIME_MEASUREMENT
 	extern u64_t __start_time_stamp;
 #endif
@@ -112,11 +131,12 @@ void _PrepC(void)
 {
 	relocate_vector_table();
 	enable_floating_point();
-	_bss_zero();
-	_data_copy();
+	z_bss_zero();
+	z_data_copy();
 #ifdef CONFIG_BOOT_TIME_MEASUREMENT
-	__start_time_stamp = 0;
+	__start_time_stamp = 0U;
 #endif
-	_Cstart();
+	z_IntLibInit();
+	z_cstart();
 	CODE_UNREACHABLE;
 }

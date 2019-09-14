@@ -9,8 +9,8 @@
  * @brief Kernel event logger support for x86
  */
 
-#ifndef __KERNEL_TRACING_H__
-#define __KERNEL_TRACING_H__
+#ifndef ZEPHYR_ARCH_X86_INCLUDE_TRACING_ARCH_H_
+#define ZEPHYR_ARCH_X86_INCLUDE_TRACING_ARCH_H_
 
 #include <arch/x86/irq_controller.h>
 
@@ -26,13 +26,13 @@ extern "C" {
  *
  * @return The key of the interrupt that is currently being processed.
  */
-static inline int _sys_current_irq_key_get(void)
+static inline int z_sys_current_irq_key_get(void)
 {
-	return _irq_controller_isr_vector_get();
+	return z_irq_controller_isr_vector_get();
 }
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __KERNEL_TRACING_H__ */
+#endif /* ZEPHYR_ARCH_X86_INCLUDE_TRACING_ARCH_H_ */

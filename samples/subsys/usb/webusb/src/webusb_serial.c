@@ -38,8 +38,9 @@
  * to support the WebUSB.
  */
 
-#define SYS_LOG_LEVEL 4
-#include <logging/sys_log.h>
+#define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
+#include <logging/log.h>
+LOG_MODULE_DECLARE(main);
 
 #include <zephyr.h>
 #include <init.h>
@@ -108,7 +109,7 @@ static struct dev_common_descriptor webusb_serial_usb_description = {
 		.bDeviceClass = 0,
 		.bDeviceSubClass = 0,
 		.bDeviceProtocol = 0,
-		.bMaxPacketSize0 = MAX_PACKET_SIZE0,
+		.bMaxPacketSize0 = USB_MAX_CTRL_MPS,
 		.idVendor = sys_cpu_to_le16((u16_t)CONFIG_USB_DEVICE_VID),
 		.idProduct = sys_cpu_to_le16((u16_t)CONFIG_USB_DEVICE_PID),
 		.bcdDevice = sys_cpu_to_le16(BCDDEVICE_RELNUM),
@@ -210,7 +211,7 @@ static struct dev_common_descriptor webusb_serial_usb_description = {
 int webusb_serial_custom_handle_req(struct usb_setup_packet *pSetup,
 		s32_t *len, u8_t **data)
 {
-	SYS_LOG_DBG("");
+	LOG_DBG("");
 
 	/* Call the callback */
 	if ((req_handlers && req_handlers->custom_handler) &&
@@ -257,12 +258,12 @@ void webusb_register_request_handlers(struct webusb_req_handlers *handlers)
 
 static void webusb_write_cb(u8_t ep, int size, void *priv)
 {
-	SYS_LOG_DBG("ep %x size %u", ep, size);
+	LOG_DBG("ep %x size %u", ep, size);
 }
 
 static void webusb_read_cb(u8_t ep, int size, void *priv)
 {
-	SYS_LOG_DBG("ep %x size %u", ep, size);
+	LOG_DBG("ep %x size %u", ep, size);
 
 	if (size <= 0) {
 		goto done;
@@ -282,40 +283,40 @@ done:
  *
  * @return  N/A.
  */
-static void webusb_serial_dev_status_cb(enum usb_dc_status_code status,
-					u8_t *param)
+static void webusb_serial_dev_status_cb(struct usb_cfg_data *cfg,
+					enum usb_dc_status_code status,
+					const u8_t *param)
 {
 	ARG_UNUSED(param);
-
-	SYS_LOG_DBG("");
+	ARG_UNUSED(cfg);
 
 	/* Check the USB status and do needed action if required */
 	switch (status) {
 	case USB_DC_ERROR:
-		SYS_LOG_DBG("USB device error");
+		LOG_DBG("USB device error");
 		break;
 	case USB_DC_RESET:
-		SYS_LOG_DBG("USB device reset detected");
+		LOG_DBG("USB device reset detected");
 		break;
 	case USB_DC_CONNECTED:
-		SYS_LOG_DBG("USB device connected");
+		LOG_DBG("USB device connected");
 		break;
 	case USB_DC_CONFIGURED:
-		SYS_LOG_DBG("USB device configured");
+		LOG_DBG("USB device configured");
 		webusb_read_cb(WEBUSB_ENDP_OUT, 0, NULL);
 		break;
 	case USB_DC_DISCONNECTED:
-		SYS_LOG_DBG("USB device disconnected");
+		LOG_DBG("USB device disconnected");
 		break;
 	case USB_DC_SUSPEND:
-		SYS_LOG_DBG("USB device supended");
+		LOG_DBG("USB device supended");
 		break;
 	case USB_DC_RESUME:
-		SYS_LOG_DBG("USB device resumed");
+		LOG_DBG("USB device resumed");
 		break;
 	case USB_DC_UNKNOWN:
 	default:
-		SYS_LOG_DBG("USB unknown state");
+		LOG_DBG("USB unknown state");
 		break;
 	}
 }
@@ -350,21 +351,21 @@ int webusb_serial_init(void)
 {
 	int ret;
 
-	SYS_LOG_DBG("");
+	LOG_DBG("");
 
 	webusb_serial_config.interface.payload_data = interface_data;
 
 	/* Initialize the WebUSB driver with the right configuration */
 	ret = usb_set_config(&webusb_serial_config);
 	if (ret < 0) {
-		SYS_LOG_ERR("Failed to config USB");
+		LOG_ERR("Failed to config USB");
 		return ret;
 	}
 
 	/* Enable WebUSB driver */
 	ret = usb_enable(&webusb_serial_config);
 	if (ret < 0) {
-		SYS_LOG_ERR("Failed to enable USB");
+		LOG_ERR("Failed to enable USB");
 		return ret;
 	}
 

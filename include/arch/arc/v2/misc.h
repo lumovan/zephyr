@@ -11,8 +11,8 @@
  * ARC-specific kernel miscellaneous interface. Included by arc/arch.h.
  */
 
-#ifndef _ARCH_ARC_V2_MISC_H_
-#define _ARCH_ARC_V2_MISC_H_
+#ifndef ZEPHYR_INCLUDE_ARCH_ARC_V2_MISC_H_
+#define ZEPHYR_INCLUDE_ARCH_ARC_V2_MISC_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,12 +23,12 @@ extern unsigned int k_cpu_sleep_mode;
 extern void k_cpu_idle(void);
 extern void k_cpu_atomic_idle(unsigned int key);
 
-extern u32_t _timer_cycle_get_32(void);
-#define _arch_k_cycle_get_32()	_timer_cycle_get_32()
+extern u32_t z_timer_cycle_get_32(void);
+#define z_arch_k_cycle_get_32()	z_timer_cycle_get_32()
 #endif
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _ARCH_ARC_V2_MISC_H_ */
+#endif /* ZEPHYR_INCLUDE_ARCH_ARC_V2_MISC_H_ */

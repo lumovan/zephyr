@@ -109,7 +109,7 @@ fcb_init(int f_area_id, struct fcb *fcb)
 	}
 
 	align = fcb_get_align(fcb);
-	if (align == 0) {
+	if (align == 0U) {
 		return FCB_ERR_ARGS;
 	}
 
@@ -292,11 +292,11 @@ fcb_offset_last_n(struct fcb *fcb, u8_t entries,
 
 	/* assure a minimum amount of entries */
 	if (!entries) {
-		entries = 1;
+		entries = 1U;
 	}
 
 	i = 0;
-	memset(&loc, 0, sizeof(loc));
+	(void)memset(&loc, 0, sizeof(loc));
 	while (!fcb_getnext(fcb, &loc)) {
 		if (i == 0) {
 			/* Start from the beginning of fcb entries */

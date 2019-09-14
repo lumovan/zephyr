@@ -17,8 +17,8 @@
  * necessary to instantiate instances of struct k_thread.
  */
 
-#ifndef _kernel_arch_thread__h_
-#define _kernel_arch_thread__h_
+#ifndef ZEPHYR_ARCH_RISCV32_INCLUDE_KERNEL_ARCH_THREAD_H_
+#define ZEPHYR_ARCH_RISCV32_INCLUDE_KERNEL_ARCH_THREAD_H_
 
 #ifndef _ASMLANGUAGE
 #include <zephyr/types.h>
@@ -55,12 +55,12 @@ struct _caller_saved {
 typedef struct _caller_saved _caller_saved_t;
 
 struct _thread_arch {
-	u32_t swap_return_value; /* Return value of _Swap() */
+	u32_t swap_return_value; /* Return value of z_swap() */
 };
 
 typedef struct _thread_arch _thread_arch_t;
 
 #endif /* _ASMLANGUAGE */
 
-#endif /* _kernel_arch_thread__h_ */
+#endif /* ZEPHYR_ARCH_RISCV32_INCLUDE_KERNEL_ARCH_THREAD_H_ */
 

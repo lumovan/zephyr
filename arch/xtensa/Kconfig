@@ -3,22 +3,10 @@
 # Copyright (c) 2016 Cadence Design Systems, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-choice
-	prompt "XTENSA core Selection"
-	depends on XTENSA
-	source "arch/xtensa/soc/*/Kconfig.soc"
-endchoice
-
 menu "XTENSA Options"
 	depends on XTENSA
 
 menu "Specific core configuration"
-
-# Include these first so that any properties (e.g. defaults) below can be
-# overriden (by defining symbols in multiple locations)
-#
-# (No SoC-specific Kconfig files as of writing, hence the optional source.)
-osource "arch/xtensa/soc/*/Kconfig"
 
 config IRQ_OFFLOAD_INTNUM
 	int "IRQ offload SW interrupt index"
@@ -46,6 +34,7 @@ config XTENSA_OMIT_HIGH_INTERRUPTS
 config XTENSA_ASM2
 	bool "New-style Xtensa context switch & interrupt layer"
 	select USE_SWITCH
+	select USE_SWITCH_SUPPORTED
 	help
 	  This selects a new implementation of context switching and
 	  interrupt handling.  Advantages are a much lower interrupt
@@ -100,5 +89,12 @@ config XTENSA_USE_CORE_CRT1
 	help
 	  SoC or boards might define their own __start by setting this setting
 	  to false.
+
+config XTENSA_KERNEL_CPU_PTR_SR
+	string
+	default "MISC0"
+	help
+	  Specify which special register to store the pointer to
+	  _kernel.cpus[] for the current CPU.
 
 endmenu

@@ -14,8 +14,8 @@
  * and the interrupt controller implementation for x86
  */
 
-#ifndef IRQ_CONTROLLER_H
-#define IRQ_CONTROLLER_H
+#ifndef ZEPHYR_INCLUDE_ARCH_X86_IRQ_CONTROLLER_H_
+#define ZEPHYR_INCLUDE_ARCH_X86_IRQ_CONTROLLER_H_
 
 #ifdef CONFIG_MVIC
 #include <drivers/mvic.h>
@@ -42,7 +42,7 @@
  * @param irq Interrupt line
  * @return Vector this interrupt has been assigned to
  */
-#define _IRQ_CONTROLLER_VECTOR_MAPPING(irq) \
+#define Z_IRQ_CONTROLLER_VECTOR_MAPPING(irq) \
 	__IRQ_CONTROLLER_VECTOR_MAPPING(irq)
 #endif
 
@@ -63,7 +63,7 @@
  *
  * @returns: N/A
  */
-static inline void _irq_controller_irq_config(unsigned int vector,
+static inline void z_irq_controller_irq_config(unsigned int vector,
 					      unsigned int irq, u32_t flags)
 {
 	__irq_controller_irq_config(vector, irq, flags);
@@ -79,13 +79,13 @@ static inline void _irq_controller_irq_config(unsigned int vector,
  * @return the vector of the interrupt that is currently being processed, or
  * -1 if this can't be determined
  */
-static inline int _irq_controller_isr_vector_get(void)
+static inline int z_irq_controller_isr_vector_get(void)
 {
 	return __irq_controller_isr_vector_get();
 }
 
 
-static inline void _irq_controller_eoi(void)
+static inline void z_irq_controller_eoi(void)
 {
 	__irq_controller_eoi();
 }
@@ -110,4 +110,4 @@ static inline void _irq_controller_eoi(void)
 
 #endif /* _ASMLANGUAGE */
 
-#endif /* IRQ_CONTROLLER_H */
+#endif /* ZEPHYR_INCLUDE_ARCH_X86_IRQ_CONTROLLER_H_ */

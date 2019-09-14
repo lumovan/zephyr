@@ -258,7 +258,7 @@ int test_switch(void)
 
 	printk("%s\n", __func__);
 
-	memset(stack2, 0, sizeof(stack2));
+	(void)memset(stack2, 0, sizeof(stack2));
 
 	int *sp = xtensa_init_stack(&stack2[ARRAY_SIZE(stack2)],
 				    (void *)test_switch_bounce,
@@ -426,7 +426,7 @@ int interrupt_test(void)
 		 */
 		const int max_reps = 8;
 		int wh = white[i % ARRAY_SIZE(white)];
-		int delay = 2*spill_time
+		int delay = spill_time * 2U
 			+ ((wh * (i+1)) % (spill_time * (max_reps - 2)));
 
 		int alarm = ccount() + delay;

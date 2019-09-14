@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __IEEE802154_CC2520_H__
-#define __IEEE802154_CC2520_H__
+#ifndef ZEPHYR_DRIVERS_IEEE802154_IEEE802154_CC2520_H_
+#define ZEPHYR_DRIVERS_IEEE802154_IEEE802154_CC2520_H_
 
 #include <linker/sections.h>
 #include <atomic.h>
@@ -48,7 +48,7 @@ struct cc2520_context {
  ***************************
  */
 
-bool _cc2520_access(struct cc2520_context *ctx, bool read, u8_t ins,
+bool z_cc2520_access(struct cc2520_context *ctx, bool read, u8_t ins,
 		    u16_t addr, void *data, size_t length);
 
 #define DEFINE_SREG_READ(__reg_name, __reg_addr)			\
@@ -56,7 +56,7 @@ bool _cc2520_access(struct cc2520_context *ctx, bool read, u8_t ins,
 	{								\
 		u8_t val;						\
 									\
-		if (_cc2520_access(ctx, true, CC2520_INS_MEMRD,		\
+		if (z_cc2520_access(ctx, true, CC2520_INS_MEMRD,		\
 				   __reg_addr, &val, 1)) {		\
 			return val;					\
 		}							\
@@ -68,7 +68,7 @@ bool _cc2520_access(struct cc2520_context *ctx, bool read, u8_t ins,
 	static inline bool write_reg_##__reg_name(struct cc2520_context *ctx, \
 						  u8_t val)		\
 	{								\
-		return _cc2520_access(ctx, false, CC2520_INS_MEMWR,	\
+		return z_cc2520_access(ctx, false, CC2520_INS_MEMWR,	\
 				      __reg_addr, &val, 1);		\
 	}
 
@@ -77,7 +77,7 @@ bool _cc2520_access(struct cc2520_context *ctx, bool read, u8_t ins,
 	{								\
 		u8_t val;						\
 									\
-		if (_cc2520_access(ctx, true, CC2520_INS_REGRD,		\
+		if (z_cc2520_access(ctx, true, CC2520_INS_REGRD,		\
 				   __reg_addr, &val, 1)) {		\
 			return val;					\
 		}							\
@@ -89,7 +89,7 @@ bool _cc2520_access(struct cc2520_context *ctx, bool read, u8_t ins,
 	static inline bool write_reg_##__reg_name(struct cc2520_context *ctx, \
 						  u8_t val)		\
 	{								\
-		return _cc2520_access(ctx, false, CC2520_INS_REGWR,	\
+		return z_cc2520_access(ctx, false, CC2520_INS_REGWR,	\
 				      __reg_addr, &val, 1);		\
 	}
 
@@ -140,7 +140,7 @@ DEFINE_SREG_WRITE(extclock, CC2520_SREG_EXTCLOCK)
 	static inline bool write_mem_##__mem_name(struct cc2520_context *ctx, \
 						  u8_t *buf)		\
 	{								\
-		return _cc2520_access(ctx, false, CC2520_INS_MEMWR,	\
+		return z_cc2520_access(ctx, false, CC2520_INS_MEMWR,	\
 				      __addr, buf, __sz);		\
 	}
 
@@ -153,30 +153,30 @@ DEFINE_MEM_WRITE(ext_addr, CC2520_MEM_EXT_ADDR, 8)
  ******************************
  */
 
-static inline bool _cc2520_command_strobe(struct cc2520_context *ctx,
+static inline bool cc2520_command_strobe(struct cc2520_context *ctx,
 					  u8_t instruction)
 {
-	return _cc2520_access(ctx, false, instruction, 0, NULL, 0);
+	return z_cc2520_access(ctx, false, instruction, 0, NULL, 0);
 }
 
-static inline bool _cc2520_command_strobe_snop(struct cc2520_context *ctx,
+static inline bool cc2520_command_strobe_snop(struct cc2520_context *ctx,
 					       u8_t instruction)
 {
 	u8_t snop[1] = { CC2520_INS_SNOP };
 
-	return _cc2520_access(ctx, false, instruction, 0, snop, 1);
+	return z_cc2520_access(ctx, false, instruction, 0, snop, 1);
 }
 
 #define DEFINE_STROBE_INSTRUCTION(__ins_name, __ins)			\
 	static inline bool instruct_##__ins_name(struct cc2520_context *ctx) \
 	{								\
-		return _cc2520_command_strobe(ctx, __ins);		\
+		return cc2520_command_strobe(ctx, __ins);		\
 	}
 
 #define DEFINE_STROBE_SNOP_INSTRUCTION(__ins_name, __ins)		\
 	static inline bool instruct_##__ins_name(struct cc2520_context *ctx) \
 	{								\
-		return _cc2520_command_strobe_snop(ctx, __ins);		\
+		return cc2520_command_strobe_snop(ctx, __ins);		\
 	}
 
 DEFINE_STROBE_INSTRUCTION(srxon, CC2520_INS_SRXON)
@@ -189,4 +189,4 @@ DEFINE_STROBE_INSTRUCTION(sxoscoff, CC2520_INS_SXOSCOFF)
 
 DEFINE_STROBE_SNOP_INSTRUCTION(sxoscon, CC2520_INS_SXOSCON)
 
-#endif /* __IEEE802154_CC2520_H__ */
+#endif /* ZEPHYR_DRIVERS_IEEE802154_IEEE802154_CC2520_H_ */

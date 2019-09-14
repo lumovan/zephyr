@@ -1,10 +1,4 @@
-#ifndef KOBJECT_TEXT_AREA
-#if ! defined(CONFIG_SIZE_OPTIMIZATIONS) || defined(CONFIG_STACK_CANARIES)
-#define KOBJECT_TEXT_AREA	256
-#else
-#define KOBJECT_TEXT_AREA	128
-#endif
-#endif
+/* SPDX-License-Identifier: Apache-2.0 */
 
 #ifdef CONFIG_USERSPACE
 	/* We need to reserve room for the gperf generated hash functions.
@@ -19,13 +13,13 @@
 	_kobject_text_area_end = .;
 #ifndef LINKER_PASS2
 #ifdef CONFIG_DYNAMIC_OBJECTS
-	PROVIDE(_k_object_gperf_find = .);
-	PROVIDE(_k_object_gperf_wordlist_foreach = .);
+	PROVIDE(z_object_gperf_find = .);
+	PROVIDE(z_object_gperf_wordlist_foreach = .);
 #else
-	PROVIDE(_k_object_find = .);
-	PROVIDE(_k_object_wordlist_foreach = .);
+	PROVIDE(z_object_find = .);
+	PROVIDE(z_object_wordlist_foreach = .);
 #endif
 #endif
-	. += KOBJECT_TEXT_AREA - (_kobject_text_area_end - _kobject_text_area_start);
+	. += CONFIG_KOBJECT_TEXT_AREA - (_kobject_text_area_end - _kobject_text_area_start);
 #endif /* CONFIG_USERSPACE */
 

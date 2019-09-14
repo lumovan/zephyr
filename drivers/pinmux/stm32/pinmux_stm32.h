@@ -8,8 +8,8 @@
  * @file header for STM32 pin multiplexing
  */
 
-#ifndef _STM32_PINMUX_H_
-#define _STM32_PINMUX_H_
+#ifndef ZEPHYR_DRIVERS_PINMUX_STM32_PINMUX_STM32_H_
+#define ZEPHYR_DRIVERS_PINMUX_STM32_PINMUX_STM32_H_
 
 #include <zephyr/types.h>
 #include <stddef.h>
@@ -77,7 +77,7 @@ clock_control_subsys_t stm32_get_port_clock(int port);
  * @param clk clock control device, for enabling/disabling clock gate
  * for the port
  */
-int _pinmux_stm32_set(u32_t pin, u32_t func,
+int z_pinmux_stm32_set(u32_t pin, u32_t func,
 		      struct device *clk);
 
 /**
@@ -117,4 +117,4 @@ void stm32_setup_pins(const struct pin_config *pinconf,
 #include "pinmux_stm32l4x.h"
 #endif
 
-#endif	/* _STM32_PINMUX_H_ */
+#endif	/* ZEPHYR_DRIVERS_PINMUX_STM32_PINMUX_STM32_H_ */

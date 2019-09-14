@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef TOOLCHAIN_GCC_H
-#define TOOLCHAIN_GCC_H
+#ifndef ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_
+#define ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_
+
 /**
  * @file
  * @brief GCC toolchain abstraction
@@ -28,6 +29,7 @@
 #endif
 
 #include <toolchain/common.h>
+#include <stdbool.h>
 
 #define ALIAS_OF(of) __attribute__((alias(#of)))
 
@@ -85,7 +87,7 @@ do {                                                                    \
 	} *__p = (__typeof__(__p)) (p);                                 \
 	__p->__v = (v);                                                 \
 	compiler_barrier();                                             \
-} while (0)
+} while (false)
 
 #else
 
@@ -95,7 +97,7 @@ do {                                                                    \
 		__typeof__(*p) __v;                                     \
 	} *__p = (__typeof__(__p)) (p);                                 \
 	__p->__v = (v);                                               \
-} while (0)
+} while (false)
 
 #endif
 
@@ -103,25 +105,28 @@ do {                                                                    \
  * stringification
  */
 #define __GENERIC_SECTION(segment) __attribute__((section(STRINGIFY(segment))))
-#define _GENERIC_SECTION(segment) __GENERIC_SECTION(segment)
+#define Z_GENERIC_SECTION(segment) __GENERIC_SECTION(segment)
 
 #define ___in_section(a, b, c) \
-	__attribute__((section("." _STRINGIFY(a)			\
-				"." _STRINGIFY(b)			\
-				"." _STRINGIFY(c))))
+	__attribute__((section("." Z_STRINGIFY(a)			\
+				"." Z_STRINGIFY(b)			\
+				"." Z_STRINGIFY(c))))
 #define __in_section(a, b, c) ___in_section(a, b, c)
 
 #define __in_section_unique(seg) ___in_section(seg, __FILE__, __COUNTER__)
 
-#ifdef CONFIG_APPLICATION_MEMORY
-#define __kernel	__in_section_unique(kernel)
-#define __kernel_noinit	__in_section_unique(kernel_noinit)
-#define __kernel_bss	__in_section_unique(kernel_bss)
-#else
-#define __kernel
-#define __kernel_noinit	__noinit
-#define __kernel_bss
-#endif
+/* When using XIP, using '__ramfunc' places a function into RAM instead
+ * of FLASH. Make sure '__ramfunc' is defined only when
+ * CONFIG_ARCH_HAS_RAMFUNC_SUPPORT is defined, so that the compiler can
+ * report an error if '__ramfunc' is used but the architecture does not
+ * support it.
+ */
+#if !defined(CONFIG_XIP)
+#define __ramfunc
+#elif defined(CONFIG_ARCH_HAS_RAMFUNC_SUPPORT)
+#define __ramfunc	__attribute__((noinline))			\
+			__attribute__((long_call, section(".ramfunc")))
+#endif /* !CONFIG_XIP */
 
 #ifndef __packed
 #define __packed        __attribute__((__packed__))
@@ -137,8 +142,8 @@ do {                                                                    \
 #define __deprecated	__attribute__((deprecated))
 #define ARG_UNUSED(x) (void)(x)
 
-#define likely(x)   __builtin_expect((long)!!(x), 1L)
-#define unlikely(x) __builtin_expect((long)!!(x), 0L)
+#define likely(x)   __builtin_expect((bool)!!(x), true)
+#define unlikely(x) __builtin_expect((bool)!!(x), false)
 
 #define popcount(x) __builtin_popcount(x)
 
@@ -158,26 +163,9 @@ do {                                                                    \
 
 #ifdef CONFIG_ARM
 
-#if defined(CONFIG_ISA_THUMB)
-
-#define FUNC_CODE()				\
-	.code 16;				\
-	.thumb_func;
-
-#define FUNC_INSTR(a)				\
-	BX pc;					\
-	NOP;					\
-	.code 32;				\
-A##a:
-
-#elif defined(CONFIG_ISA_THUMB2)
+#if defined(CONFIG_ISA_THUMB2)
 
 #define FUNC_CODE() .thumb;
-#define FUNC_INSTR(a)
-
-#elif defined(CONFIG_ISA_ARM)
-
-#define FUNC_CODE() .code 32;
 #define FUNC_INSTR(a)
 
 #else
@@ -301,8 +289,6 @@ A##a:
 #if defined(CONFIG_ISA_THUMB2)
 /* '.syntax unified' is a gcc-ism used in thumb-2 asm files */
 #define _ASM_FILE_PROLOGUE .text; .syntax unified; .thumb
-#elif defined(CONFIG_ISA_THUMB)
-#define _ASM_FILE_PROLOGUE .text; .code 16
 #else
 #define _ASM_FILE_PROLOGUE .text; .code 32
 #endif
@@ -345,6 +331,13 @@ A##a:
 		",%c0"                              \
 		"\n\t.type\t" #name ",@object" :  : "n"(value))
 
+#elif defined(CONFIG_X86_64)
+
+#define GEN_ABSOLUTE_SYM(name, value)               \
+	__asm__(".globl\t" #name "\n\t.equ\t" #name \
+		",%0"                               \
+		"\n\t.type\t" #name ",@object" :  : "n"(value))
+
 #elif defined(CONFIG_NIOS2) || defined(CONFIG_RISCV32) || defined(CONFIG_XTENSA)
 
 /* No special prefixes necessary for constants in this arch AFAICT */
@@ -364,6 +357,6 @@ A##a:
 
 #define compiler_barrier() do { \
 	__asm__ __volatile__ ("" ::: "memory"); \
-} while ((0))
+} while (false)
 
-#endif /* TOOLCHAIN_GCC_H */
+#endif /* ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_ */

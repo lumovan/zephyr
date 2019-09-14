@@ -16,6 +16,7 @@
 #include <toolchain.h>
 #include <cache.h>
 #include <cache_private.h>
+#include <stdbool.h>
 
 #if defined(CONFIG_CLFLUSH_INSTRUCTION_SUPPORTED) || \
 	defined(CONFIG_CLFLUSH_DETECT)
@@ -62,14 +63,14 @@ _sys_cache_flush_sig(_cache_flush_clflush)
 _sys_cache_flush_t *sys_cache_flush;
 static void init_cache_flush(void)
 {
-	if (_is_clflush_available()) {
+	if (z_is_clflush_available()) {
 		sys_cache_flush = _cache_flush_clflush;
 	} else {
-		sys_cache_flush = _cache_flush_wbinvd;
+		sys_cache_flush = z_cache_flush_wbinvd;
 	}
 }
 #else
-#define init_cache_flush() do { } while ((0))
+#define init_cache_flush() do { } while (false)
 
 #if defined(CONFIG_CLFLUSH_INSTRUCTION_SUPPORTED)
 FUNC_ALIAS(_cache_flush_clflush, sys_cache_flush, void);
@@ -82,7 +83,7 @@ FUNC_ALIAS(_cache_flush_clflush, sys_cache_flush, void);
 size_t sys_cache_line_size;
 static void init_cache_line_size(void)
 {
-	sys_cache_line_size = _cache_line_size_get();
+	sys_cache_line_size = z_cache_line_size_get();
 }
 #else
 #define init_cache_line_size() do { } while ((0))

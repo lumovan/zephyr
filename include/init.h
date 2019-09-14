@@ -5,8 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _INIT_H_
-#define _INIT_H_
+#ifndef ZEPHYR_INCLUDE_INIT_H_
+#define ZEPHYR_INCLUDE_INIT_H_
 
 #include <device.h>
 #include <toolchain.h>
@@ -30,7 +30,7 @@ extern "C" {
 /* A counter is used to avoid issues when two or more system devices
  * are declared in the same C file with the same init function.
  */
-#define _SYS_NAME(init_fn) _CONCAT(_CONCAT(sys_init_, init_fn), __COUNTER__)
+#define Z_SYS_NAME(init_fn) _CONCAT(_CONCAT(sys_init_, init_fn), __COUNTER__)
 
 /**
  * @def SYS_INIT
@@ -41,13 +41,14 @@ extern "C" {
  *
  * @param init_fn Pointer to the boot function to run
  *
- * @param level The initialization level, See DEVICE_INIT for details.
+ * @param level The initialization level, See DEVICE_AND_API_INIT for details.
  *
  * @param prio Priority within the selected initialization level. See
- * DEVICE_INIT for details.
+ * DEVICE_AND_API_INIT for details.
  */
 #define SYS_INIT(init_fn, level, prio) \
-	DEVICE_INIT(_SYS_NAME(init_fn), "", init_fn, NULL, NULL, level, prio)
+	DEVICE_AND_API_INIT(Z_SYS_NAME(init_fn), "", init_fn, NULL, NULL, level,\
+	prio, NULL)
 
 /**
  * @def SYS_DEVICE_DEFINE
@@ -67,11 +68,11 @@ extern "C" {
  * 	       DEVICE_INIT for details.
  */
 #define SYS_DEVICE_DEFINE(drv_name, init_fn, pm_control_fn, level, prio) \
-	DEVICE_DEFINE(_SYS_NAME(init_fn), drv_name, init_fn, pm_control_fn, \
+	DEVICE_DEFINE(Z_SYS_NAME(init_fn), drv_name, init_fn, pm_control_fn, \
 		      NULL, NULL, level, prio, NULL)
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _INIT_H_ */
+#endif /* ZEPHYR_INCLUDE_INIT_H_ */

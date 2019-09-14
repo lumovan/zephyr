@@ -9,8 +9,8 @@
  * @brief Ethernet Management interface public header
  */
 
-#ifndef __ETHERNET_MGMT_H__
-#define __ETHERNET_MGMT_H__
+#ifndef ZEPHYR_INCLUDE_NET_ETHERNET_MGMT_H_
+#define ZEPHYR_INCLUDE_NET_ETHERNET_MGMT_H_
 
 #include <net/ethernet.h>
 #include <net/net_mgmt.h>
@@ -25,6 +25,8 @@ extern "C" {
  * @ingroup networking
  * @{
  */
+
+/** @cond INTERNAL_HIDDEN */
 
 #define _NET_ETHERNET_LAYER	NET_MGMT_LAYER_L2
 #define _NET_ETHERNET_CODE	0x208
@@ -128,30 +130,62 @@ enum net_event_ethernet_cmd {
 
 struct net_if;
 
+/** @endcond */
+
+/**
+ * @brief Raise CARRIER_ON event when Ethernet is connected.
+ *
+ * @param iface Ethernet network interface.
+ */
 #if defined(CONFIG_NET_L2_ETHERNET_MGMT)
 void ethernet_mgmt_raise_carrier_on_event(struct net_if *iface);
-
-void ethernet_mgmt_raise_carrier_off_event(struct net_if *iface);
-void ethernet_mgmt_raise_vlan_enabled_event(struct net_if *iface, u16_t tag);
-void ethernet_mgmt_raise_vlan_disabled_event(struct net_if *iface, u16_t tag);
 #else
 static inline void ethernet_mgmt_raise_carrier_on_event(struct net_if *iface)
 {
 	ARG_UNUSED(iface);
 }
+#endif
 
+/**
+ * @brief Raise CARRIER_OFF event when Ethernet is disconnected.
+ *
+ * @param iface Ethernet network interface.
+ */
+#if defined(CONFIG_NET_L2_ETHERNET_MGMT)
+void ethernet_mgmt_raise_carrier_off_event(struct net_if *iface);
+#else
 static inline void ethernet_mgmt_raise_carrier_off_event(struct net_if *iface)
 {
 	ARG_UNUSED(iface);
 }
+#endif
 
+/**
+ * @brief Raise VLAN_ENABLED event when VLAN is enabled.
+ *
+ * @param iface Ethernet network interface.
+ * @param tag VLAN tag which is enabled.
+ */
+#if defined(CONFIG_NET_L2_ETHERNET_MGMT)
+void ethernet_mgmt_raise_vlan_enabled_event(struct net_if *iface, u16_t tag);
+#else
 static inline void ethernet_mgmt_raise_vlan_enabled_event(struct net_if *iface,
 							  u16_t tag)
 {
 	ARG_UNUSED(iface);
 	ARG_UNUSED(tag);
 }
+#endif
 
+/**
+ * @brief Raise VLAN_DISABLED event when VLAN is disabled.
+ *
+ * @param iface Ethernet network interface.
+ * @param tag VLAN tag which is disabled.
+ */
+#if defined(CONFIG_NET_L2_ETHERNET_MGMT)
+void ethernet_mgmt_raise_vlan_disabled_event(struct net_if *iface, u16_t tag);
+#else
 static inline void ethernet_mgmt_raise_vlan_disabled_event(struct net_if *iface,
 							   u16_t tag)
 {
@@ -159,6 +193,7 @@ static inline void ethernet_mgmt_raise_vlan_disabled_event(struct net_if *iface,
 	ARG_UNUSED(tag);
 }
 #endif
+
 /**
  * @}
  */
@@ -167,4 +202,4 @@ static inline void ethernet_mgmt_raise_vlan_disabled_event(struct net_if *iface,
 }
 #endif
 
-#endif /* __ETHERNET_MGMT_H__ */
+#endif /* ZEPHYR_INCLUDE_NET_ETHERNET_MGMT_H_ */

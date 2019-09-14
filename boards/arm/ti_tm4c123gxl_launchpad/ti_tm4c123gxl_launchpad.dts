@@ -1,11 +1,10 @@
 /dts-v1/;
 
-#include <ti/tm4c123.dtsi>
+#include <ti/tm4c123gh6pm.dtsi>
 
 / {
 	model = "TI TM4C123GXL Launchpad";
-	compatible = "ti,ti_tm4c123gxl_launchpad","ti,tm4c123gh6pm",
-						"ti,tivaware";
+	compatible = "ti,ti_tm4c123gxl_launchpad", "ti,tm4c123gh6pm", "ti,tivaware";
 	aliases {
 		uart-0 = &uart0;
 	};

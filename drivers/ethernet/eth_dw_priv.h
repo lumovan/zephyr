@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef DRIVERS_ETHERNET_ETH_DW_PRIV_H_
-#define DRIVERS_ETHERNET_ETH_DW_PRIV_H_
+#ifndef ZEPHYR_DRIVERS_ETHERNET_ETH_DW_PRIV_H_
+#define ZEPHYR_DRIVERS_ETHERNET_ETH_DW_PRIV_H_
 
 #ifdef CONFIG_PCI
 #include <pci/pci.h>
@@ -142,8 +142,6 @@ struct eth_rx_desc {
 	u8_t *buf2_ptr;
 };
 
-#define ETH_DW_MTU 1500
-
 /* Driver metadata associated with each Ethernet device */
 struct eth_runtime {
 	u32_t base_addr;
@@ -156,7 +154,7 @@ struct eth_runtime {
 	/* Receive descriptor */
 	volatile struct eth_rx_desc rx_desc;
 	/* Receive DMA packet buffer */
-	volatile u8_t rx_buf[ETH_DW_MTU];
+	volatile u8_t rx_buf[NET_ETH_MTU];
 
 	union {
 		struct {
@@ -207,4 +205,4 @@ struct eth_runtime {
 }
 #endif
 
-#endif /* DRIVERS_ETHERNET_ETH_DW_PRIV_H_ */
+#endif /* ZEPHYR_DRIVERS_ETHERNET_ETH_DW_PRIV_H_ */

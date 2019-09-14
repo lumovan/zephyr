@@ -9,8 +9,8 @@
  * @brief Network Events code public header
  */
 
-#ifndef __NET_EVENT_H__
-#define __NET_EVENT_H__
+#ifndef ZEPHYR_INCLUDE_NET_NET_EVENT_H_
+#define ZEPHYR_INCLUDE_NET_NET_EVENT_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,6 +22,8 @@ extern "C" {
  * @addtogroup net_mgmt
  * @{
  */
+
+/** @cond INTERNAL_HIDDEN */
 
 /* Network Interface events */
 #define _NET_IF_LAYER		NET_MGMT_LAYER_L1
@@ -140,6 +142,8 @@ enum net_event_ipv4_cmd {
 #define NET_EVENT_IPV4_ROUTER_ADD				\
 	(_NET_EVENT_IPV4_BASE |	NET_EVENT_IPV4_CMD_ROUTER_ADD)
 
+/** @endcond */
+
 #ifdef CONFIG_NET_MGMT_EVENT_INFO
 /**
  * @brief Network Management event information structure
@@ -193,4 +197,4 @@ struct net_event_ipv6_route {
  * @}
  */
 
-#endif /* __NET_EVENT_H__ */
+#endif /* ZEPHYR_INCLUDE_NET_NET_EVENT_H_ */

@@ -11,8 +11,8 @@
  * Exception/interrupt context helpers.
  */
 
-#ifndef _ARM_CORTEXM_ISR__H_
-#define _ARM_CORTEXM_ISR__H_
+#ifndef ZEPHYR_ARCH_ARM_INCLUDE_CORTEX_M_EXC_H_
+#define ZEPHYR_ARCH_ARM_INCLUDE_CORTEX_M_EXC_H_
 
 #include <arch/cpu.h>
 
@@ -49,7 +49,7 @@ extern volatile irq_offload_routine_t offload_routine;
  *
  * @return 1 if in ISR, 0 if not.
  */
-static ALWAYS_INLINE int _IsInIsr(void)
+static ALWAYS_INLINE bool z_IsInIsr(void)
 {
 	u32_t vector = __get_IPSR();
 
@@ -63,7 +63,7 @@ static ALWAYS_INLINE int _IsInIsr(void)
 		/* On ARMv6-M there is no nested execution bit, so we check
 		 * exception 3, hard fault, to a detect a nested exception.
 		 */
-		|| (vector == 3)
+		|| (vector == 3U)
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 		/* If not in thread mode, and if RETTOBASE bit in ICSR is 0,
 		 * then there are preempted active exceptions to execute.
@@ -93,7 +93,7 @@ static ALWAYS_INLINE int _IsInIsr(void)
  *
  * @return N/A
  */
-static ALWAYS_INLINE void _ExcSetup(void)
+static ALWAYS_INLINE void z_ExcSetup(void)
 {
 	NVIC_SetPriority(PendSV_IRQn, 0xff);
 
@@ -144,7 +144,7 @@ static ALWAYS_INLINE void _ExcSetup(void)
  *
  * @return N/A
  */
-static ALWAYS_INLINE void _ClearFaults(void)
+static ALWAYS_INLINE void z_clearfaults(void)
 {
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
 #elif defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
@@ -167,4 +167,4 @@ static ALWAYS_INLINE void _ClearFaults(void)
 #endif
 
 
-#endif /* _ARM_CORTEXM_ISR__H_ */
+#endif /* ZEPHYR_ARCH_ARM_INCLUDE_CORTEX_M_EXC_H_ */

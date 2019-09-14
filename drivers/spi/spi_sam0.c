@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define SYS_LOG_LEVEL CONFIG_SYS_LOG_SPI_LEVEL
-#include <logging/sys_log.h>
+#define LOG_LEVEL CONFIG_SPI_LOG_LEVEL
+#include <logging/log.h>
+LOG_MODULE_REGISTER(spi_sam0);
 
 #include "spi_context.h"
 #include <errno.h>
 #include <device.h>
 #include <spi.h>
 #include <soc.h>
-#include <board.h>
 
 /* Device constant configuration parameters */
 struct spi_sam0_config {
@@ -46,10 +46,15 @@ static int spi_sam0_configure(struct device *dev,
 			      const struct spi_config *config)
 {
 	const struct spi_sam0_config *cfg = dev->config->config_info;
+	struct spi_sam0_data *data = dev->driver_data;
 	SercomSpi *regs = cfg->regs;
 	SERCOM_SPI_CTRLA_Type ctrla = {.reg = 0};
 	SERCOM_SPI_CTRLB_Type ctrlb = {.reg = 0};
 	int div;
+
+	if (spi_context_configured(&data->ctx, config)) {
+		return 0;
+	}
 
 	if (SPI_OP_MODE_GET(config->operation) != SPI_OP_MODE_MASTER) {
 		/* Slave mode is not implemented. */
@@ -58,21 +63,21 @@ static int spi_sam0_configure(struct device *dev,
 
 	ctrla.bit.MODE = SERCOM_SPI_CTRLA_MODE_SPI_MASTER_Val;
 
-	if ((config->operation & SPI_TRANSFER_LSB) != 0) {
+	if ((config->operation & SPI_TRANSFER_LSB) != 0U) {
 		ctrla.bit.DORD = 1;
 	}
 
-	if ((config->operation & SPI_MODE_CPOL) != 0) {
+	if ((config->operation & SPI_MODE_CPOL) != 0U) {
 		ctrla.bit.CPOL = 1;
 	}
 
-	if ((config->operation & SPI_MODE_CPHA) != 0) {
+	if ((config->operation & SPI_MODE_CPHA) != 0U) {
 		ctrla.bit.CPHA = 1;
 	}
 
 	ctrla.reg |= cfg->pads;
 
-	if ((config->operation & SPI_MODE_LOOP) != 0) {
+	if ((config->operation & SPI_MODE_LOOP) != 0U) {
 		/* Put MISO and MOSI on the same pad */
 		ctrla.bit.DOPO = 0;
 		ctrla.bit.DIPO = 0;
@@ -89,8 +94,8 @@ static int spi_sam0_configure(struct device *dev,
 	ctrlb.bit.CHSIZE = 0;
 
 	/* Use the requested or next higest possible frequency */
-	div = (SOC_ATMEL_SAM0_GCLK0_FREQ_HZ / config->frequency) / 2 - 1;
-	div = max(0, min(UINT8_MAX, div));
+	div = (SOC_ATMEL_SAM0_GCLK0_FREQ_HZ / config->frequency) / 2U - 1;
+	div = MAX(0, MIN(UINT8_MAX, div));
 
 	/* Update the configuration only if it has changed */
 	if (regs->CTRLA.reg != ctrla.reg || regs->CTRLB.reg != ctrlb.reg ||
@@ -105,6 +110,9 @@ static int spi_sam0_configure(struct device *dev,
 		regs->CTRLA = ctrla;
 		wait_synchronization(regs);
 	}
+
+	data->ctx.config = config;
+	spi_context_cs_configure(&data->ctx);
 
 	return 0;
 }
@@ -122,7 +130,7 @@ static void spi_sam0_shift_master(SercomSpi *regs, struct spi_sam0_data *data)
 	if (spi_context_tx_buf_on(&data->ctx)) {
 		tx = *(u8_t *)(data->ctx.tx_buf);
 	} else {
-		tx = 0;
+		tx = 0U;
 	}
 
 	while (!regs->INTFLAG.bit.DRE) {
@@ -157,7 +165,7 @@ static void spi_sam0_finish(SercomSpi *regs)
 static void spi_sam0_fast_tx(SercomSpi *regs, const struct spi_buf *tx_buf)
 {
 	const u8_t *p = tx_buf->buf;
-	const u8_t *pend = tx_buf->buf + tx_buf->len;
+	const u8_t *pend = (u8_t *)tx_buf->buf + tx_buf->len;
 	u8_t ch;
 
 	while (p != pend) {
@@ -215,11 +223,11 @@ static void spi_sam0_fast_txrx(SercomSpi *regs,
 			       const struct spi_buf *rx_buf)
 {
 	const u8_t *tx = tx_buf->buf;
-	const u8_t *txend = tx_buf->buf + tx_buf->len;
+	const u8_t *txend = (u8_t *)tx_buf->buf + tx_buf->len;
 	u8_t *rx = rx_buf->buf;
 	size_t len = rx_buf->len;
 
-	if (len <= 0) {
+	if (len == 0) {
 		return;
 	}
 
@@ -271,8 +279,8 @@ static void spi_sam0_fast_transceive(struct device *dev,
 	size_t tx_count = 0;
 	size_t rx_count = 0;
 	SercomSpi *regs = cfg->regs;
-	const struct spi_buf *tx;
-	const struct spi_buf *rx;
+	const struct spi_buf *tx = NULL;
+	const struct spi_buf *rx = NULL;
 
 	if (tx_bufs) {
 		tx = tx_bufs->buffers;
@@ -370,8 +378,6 @@ static int spi_sam0_transceive(struct device *dev,
 		goto done;
 	}
 
-	data->ctx.config = config;
-	spi_context_cs_configure(&data->ctx);
 	spi_context_cs_control(&data->ctx, true);
 
 	/* This driver special cases the common send only, receive
@@ -396,6 +402,14 @@ done:
 	return err;
 }
 
+static int spi_sam0_transceive_sync(struct device *dev,
+				    const struct spi_config *config,
+				    const struct spi_buf_set *tx_bufs,
+				    const struct spi_buf_set *rx_bufs)
+{
+	return spi_sam0_transceive(dev, config, tx_bufs, rx_bufs);
+}
+
 #ifdef CONFIG_SPI_ASYNC
 static int spi_sam0_transceive_async(struct device *dev,
 				     const struct spi_config *config,
@@ -403,6 +417,7 @@ static int spi_sam0_transceive_async(struct device *dev,
 				     const struct spi_buf_set *rx_bufs,
 				     struct k_poll_signal *async)
 {
+	/* TODO: implement asyc transceive */
 	return -ENOTSUP;
 }
 #endif /* CONFIG_SPI_ASYNC */
@@ -444,19 +459,23 @@ static int spi_sam0_init(struct device *dev)
 }
 
 static const struct spi_driver_api spi_sam0_driver_api = {
-	.transceive = spi_sam0_transceive,
+	.transceive = spi_sam0_transceive_sync,
 #ifdef CONFIG_SPI_ASYNC
 	.transceive_async = spi_sam0_transceive_async,
 #endif
 	.release = spi_sam0_release,
 };
 
+#define SPI_SAM0_SERCOM_PADS(n) \
+	SERCOM_SPI_CTRLA_DIPO(DT_SPI_SAM0_SERCOM##n##_DIPO) | \
+	SERCOM_SPI_CTRLA_DOPO(DT_SPI_SAM0_SERCOM##n##_DOPO)
+
 #define SPI_SAM0_DEFINE_CONFIG(n)                                            \
 	static const struct spi_sam0_config spi_sam0_config_##n = {          \
-		.regs = (SercomSpi *)CONFIG_SPI_SAM0_SERCOM##n##_BASE_ADDRESS, \
+		.regs = (SercomSpi *)DT_SPI_SAM0_SERCOM##n##_BASE_ADDRESS, \
 		.pm_apbcmask = PM_APBCMASK_SERCOM##n,                        \
 		.gclk_clkctrl_id = GCLK_CLKCTRL_ID_SERCOM##n##_CORE,         \
-		.pads = CONFIG_SPI_SAM0_SERCOM##n##_PADS                     \
+		.pads = SPI_SAM0_SERCOM_PADS(n)                       \
 	}
 
 #define SPI_SAM0_DEVICE_INIT(n)                                              \
@@ -466,31 +485,31 @@ static const struct spi_driver_api spi_sam0_driver_api = {
 		SPI_CONTEXT_INIT_SYNC(spi_sam0_dev_data_##n, ctx),           \
 	};                                                                   \
 	DEVICE_AND_API_INIT(spi_sam0_##n, \
-			    CONFIG_SPI_SAM0_SERCOM##n##_LABEL,               \
+			    DT_SPI_SAM0_SERCOM##n##_LABEL,               \
 			    &spi_sam0_init, &spi_sam0_dev_data_##n,          \
 			    &spi_sam0_config_##n, POST_KERNEL,               \
 			    CONFIG_SPI_INIT_PRIORITY, &spi_sam0_driver_api)
 
-#if CONFIG_SPI_SAM0_SERCOM0_BASE_ADDRESS
+#if DT_SPI_SAM0_SERCOM0_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(0);
 #endif
 
-#if CONFIG_SPI_SAM0_SERCOM1_BASE_ADDRESS
+#if DT_SPI_SAM0_SERCOM1_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(1);
 #endif
 
-#if CONFIG_SPI_SAM0_SERCOM2_BASE_ADDRESS
+#if DT_SPI_SAM0_SERCOM2_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(2);
 #endif
 
-#if CONFIG_SPI_SAM0_SERCOM3_BASE_ADDRESS
+#if DT_SPI_SAM0_SERCOM3_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(3);
 #endif
 
-#if CONFIG_SPI_SAM0_SERCOM4_BASE_ADDRESS
+#if DT_SPI_SAM0_SERCOM4_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(4);
 #endif
 
-#if CONFIG_SPI_SAM0_SERCOM5_BASE_ADDRESS
+#if DT_SPI_SAM0_SERCOM5_BASE_ADDRESS
 SPI_SAM0_DEVICE_INIT(5);
 #endif

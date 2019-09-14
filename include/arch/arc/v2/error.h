@@ -11,11 +11,12 @@
  * ARC-specific kernel error handling interface. Included by arc/arch.h.
  */
 
-#ifndef _ARCH_ARC_V2_ERROR_H_
-#define _ARCH_ARC_V2_ERROR_H_
+#ifndef ZEPHYR_INCLUDE_ARCH_ARC_V2_ERROR_H_
+#define ZEPHYR_INCLUDE_ARCH_ARC_V2_ERROR_H_
 
 #include <arch/arc/syscall.h>
 #include <arch/arc/v2/exc.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,8 +24,8 @@ extern "C" {
 
 #ifndef _ASMLANGUAGE
 #include <toolchain/gcc.h>
-extern void _NanoFatalErrorHandler(unsigned int, const NANO_ESF*);
-extern void _SysFatalErrorHandler(unsigned int cause, const NANO_ESF *esf);
+extern void z_NanoFatalErrorHandler(unsigned int, const NANO_ESF*);
+extern void z_SysFatalErrorHandler(unsigned int cause, const NANO_ESF *esf);
 #endif
 
 #define _NANO_ERR_HW_EXCEPTION (0)      /* MPU/Bus/Usage fault */
@@ -40,10 +41,10 @@ extern void _SysFatalErrorHandler(unsigned int cause, const NANO_ESF *esf);
  * a new exception; when the processor is in thread context, the exception
  * will be raised
  */
-#define _ARCH_EXCEPT(reason_p)	do { \
-	if (_arc_v2_irq_unit_is_in_isr()) { \
+#define Z_ARCH_EXCEPT(reason_p)	do { \
+	if (z_arc_v2_irq_unit_is_in_isr()) { \
 		printk("@ %s:%d:\n", __FILE__,  __LINE__); \
-		_NanoFatalErrorHandler(reason_p, 0); \
+		z_NanoFatalErrorHandler(reason_p, 0); \
 	} else {\
 		__asm__ volatile ( \
 		"mov r0, %[reason]\n\t" \
@@ -54,11 +55,11 @@ extern void _SysFatalErrorHandler(unsigned int cause, const NANO_ESF *esf);
 		: "memory"); \
 		CODE_UNREACHABLE; \
 	} \
-	} while (0)
+	} while (false)
 
 #ifdef __cplusplus
 }
 #endif
 
 
-#endif /* _ARCH_ARC_V2_ERROR_H_ */
+#endif /* ZEPHYR_INCLUDE_ARCH_ARC_V2_ERROR_H_ */

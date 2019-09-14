@@ -7,11 +7,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if 1
-#define SYS_LOG_DOMAIN "echo-server"
-#define NET_SYS_LOG_LEVEL SYS_LOG_LEVEL_DEBUG
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_DECLARE(net_echo_server_sample, LOG_LEVEL_DBG);
 
 #include <zephyr.h>
 #include <errno.h>
@@ -92,7 +89,8 @@ static int process_udp(struct data *data)
 	struct sockaddr client_addr;
 	socklen_t client_addr_len;
 
-	NET_INFO("Waiting for UDP packets (%s)...", data->proto);
+	NET_INFO("Waiting for UDP packets on port %d (%s)...",
+		 MY_PORT, data->proto);
 
 	do {
 		client_addr_len = sizeof(client_addr);
@@ -117,7 +115,7 @@ static int process_udp(struct data *data)
 			break;
 		}
 
-		if (++data->udp.counter % 1000 == 0) {
+		if (++data->udp.counter % 1000 == 0U) {
 			NET_INFO("%s UDP: Sent %u packets", data->proto,
 				 data->udp.counter);
 		}
@@ -134,7 +132,7 @@ static void process_udp4(void)
 	int ret;
 	struct sockaddr_in addr4;
 
-	memset(&addr4, 0, sizeof(addr4));
+	(void)memset(&addr4, 0, sizeof(addr4));
 	addr4.sin_family = AF_INET;
 	addr4.sin_port = htons(MY_PORT);
 
@@ -158,7 +156,7 @@ static void process_udp6(void)
 	int ret;
 	struct sockaddr_in6 addr6;
 
-	memset(&addr6, 0, sizeof(addr6));
+	(void)memset(&addr6, 0, sizeof(addr6));
 	addr6.sin6_family = AF_INET6;
 	addr6.sin6_port = htons(MY_PORT);
 

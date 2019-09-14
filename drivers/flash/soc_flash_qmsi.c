@@ -115,7 +115,7 @@ static int flash_qmsi_write(struct device *dev, off_t addr,
 {
 	qm_flash_t flash = QM_FLASH_0;
 	qm_flash_region_t reg;
-	u32_t data_word = 0, offset = 0, f_addr = 0;
+	u32_t data_word = 0U, offset = 0U, f_addr = 0U;
 
 	if ((!is_aligned_32(len)) || (!is_aligned_32(addr))) {
 		return -EINVAL;
@@ -173,7 +173,7 @@ static int flash_qmsi_erase(struct device *dev, off_t addr, size_t size)
 {
 	qm_flash_t flash = QM_FLASH_0;
 	qm_flash_region_t reg;
-	u32_t page = 0;
+	u32_t page = 0U;
 
 	/* starting address needs to be a 2KB aligned address */
 	if (addr & QM_FLASH_ADDRESS_MASK) {
@@ -303,19 +303,25 @@ static int flash_qmsi_resume_device(struct device *dev)
 }
 
 static int flash_qmsi_device_ctrl(struct device *dev, u32_t ctrl_command,
-				  void *context)
+				  void *context, device_pm_cb cb, void *arg)
 {
+	int ret = 0;
+
 	if (ctrl_command == DEVICE_PM_SET_POWER_STATE) {
 		if (*((u32_t *)context) == DEVICE_PM_SUSPEND_STATE) {
-			return flash_qmsi_suspend_device(dev);
+			ret = flash_qmsi_suspend_device(dev);
 		} else if (*((u32_t *)context) == DEVICE_PM_ACTIVE_STATE) {
-			return flash_qmsi_resume_device(dev);
+			ret = flash_qmsi_resume_device(dev);
 		}
 	} else if (ctrl_command == DEVICE_PM_GET_POWER_STATE) {
 		*((u32_t *)context) = flash_qmsi_get_power_state(dev);
 	}
 
-	return 0;
+	if (cb) {
+		cb(dev, ret, context, arg);
+	}
+
+	return ret;
 }
 #else
 #define flash_qmsi_set_power_state(...)

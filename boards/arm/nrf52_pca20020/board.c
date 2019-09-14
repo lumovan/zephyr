@@ -5,7 +5,6 @@
  */
 
 #include <init.h>
-#include <board.h>
 #include <gpio.h>
 #include <misc/printk.h>
 
@@ -50,7 +49,7 @@ static int pwr_ctrl_init(struct device *dev)
 #endif
 
 static const struct pwr_ctrl_cfg vdd_pwr_ctrl_cfg = {
-	.port = CONFIG_GPIO_P0_DEV_NAME,
+	.port = DT_GPIO_P0_DEV_NAME,
 	.pin = VDD_PWR_CTRL_GPIO_PIN,
 };
 
@@ -68,7 +67,7 @@ DEVICE_INIT(vdd_pwr_ctrl_init, "", pwr_ctrl_init, NULL, &vdd_pwr_ctrl_cfg,
 #endif
 
 static const struct pwr_ctrl_cfg ccs_vdd_pwr_ctrl_cfg = {
-	.port = CONFIG_GPIO_SX1509B_DEV_NAME,
+	.port = DT_SEMTECH_SX1509B_0_LABEL,
 	.pin = CCS_VDD_PWR_CTRL_GPIO_PIN,
 };
 

@@ -22,13 +22,13 @@ osSemaphoreId osSemaphoreCreate(const osSemaphoreDef_t *semaphore_def,
 		return NULL;
 	}
 
-	if (_is_in_isr()) {
+	if (k_is_in_isr()) {
 		return NULL;
 	}
 
 	if (k_mem_slab_alloc(&cmsis_semaphore_slab,
 				(void **)&semaphore, 100) == 0) {
-		memset(semaphore, 0, sizeof(struct k_sem));
+		(void)memset(semaphore, 0, sizeof(struct k_sem));
 	} else {
 		return NULL;
 	}
@@ -50,13 +50,13 @@ int32_t osSemaphoreWait(osSemaphoreId semaphore_id, uint32_t timeout)
 		return -1;
 	}
 
-	if (_is_in_isr()) {
+	if (k_is_in_isr()) {
 		return -1;
 	}
 
 	if (timeout == osWaitForever) {
 		status = k_sem_take(semaphore, K_FOREVER);
-	} else if (timeout == 0) {
+	} else if (timeout == 0U) {
 		status = k_sem_take(semaphore, K_NO_WAIT);
 	} else {
 		status = k_sem_take(semaphore, timeout);
@@ -105,7 +105,7 @@ osStatus osSemaphoreDelete(osSemaphoreId semaphore_id)
 		return osErrorParameter;
 	}
 
-	if (_is_in_isr()) {
+	if (k_is_in_isr()) {
 		return osErrorISR;
 	}
 

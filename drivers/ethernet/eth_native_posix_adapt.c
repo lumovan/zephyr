@@ -11,8 +11,6 @@
  * because there is naming conflicts between host and zephyr network stacks.
  */
 
-#define _DEFAULT_SOURCE
-
 /* Host include files */
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +22,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <net/if.h>
 #include <time.h>
 #include "posix_trace.h"
@@ -35,12 +34,14 @@
 /* Zephyr include files. Be very careful here and only include minimum
  * things needed.
  */
-#define SYS_LOG_DOMAIN "eth-posix-adapt"
-#define SYS_LOG_LEVEL CONFIG_SYS_LOG_ETHERNET_LEVEL
+#define LOG_MODULE_NAME eth_posix_adapt
+#define LOG_LEVEL CONFIG_ETHERNET_LOG_LEVEL
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <zephyr/types.h>
 #include <sys_clock.h>
-#include <logging/sys_log.h>
 
 #if defined(CONFIG_NET_GPTP)
 #include <net/gptp.h>
@@ -56,17 +57,17 @@ int eth_iface_create(const char *if_name, bool tun_only)
 	struct ifreq ifr;
 	int fd, ret = -EINVAL;
 
-	fd = open(CONFIG_ETH_NATIVE_POSIX_DEV_NAME, O_RDWR);
+	fd = open(ETH_NATIVE_POSIX_DEV_NAME, O_RDWR);
 	if (fd < 0) {
 		return -errno;
 	}
 
-	memset(&ifr, 0, sizeof(ifr));
+	(void)memset(&ifr, 0, sizeof(ifr));
 
 #ifdef __linux
 	ifr.ifr_flags = (tun_only ? IFF_TUN : IFF_TAP) | IFF_NO_PI;
 
-	strncpy(ifr.ifr_name, if_name, IFNAMSIZ);
+	strncpy(ifr.ifr_name, if_name, IFNAMSIZ - 1);
 
 	ret = ioctl(fd, TUNSETIFF, (void *)&ifr);
 	if (ret < 0) {
@@ -106,27 +107,35 @@ static int ssystem(const char *fmt, ...)
 
 int eth_setup_host(const char *if_name)
 {
+	if (!IS_ENABLED(CONFIG_ETH_NATIVE_POSIX_STARTUP_AUTOMATIC)) {
+		return 0;
+	}
+
 	/* User might have added -i option to setup script string, so
 	 * check that situation in the script itself so that the -i option
 	 * we add here is ignored in that case.
 	 */
-	return ssystem("%s -i %s", CONFIG_ETH_NATIVE_POSIX_SETUP_SCRIPT,
+	return ssystem("%s -i %s", ETH_NATIVE_POSIX_SETUP_SCRIPT,
 		       if_name);
 }
 
 int eth_start_script(const char *if_name)
 {
-	if (CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT[0] == '\0') {
+	if (!IS_ENABLED(CONFIG_ETH_NATIVE_POSIX_STARTUP_AUTOMATIC)) {
 		return 0;
 	}
 
-	if (CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT_USER[0] == '\0') {
-		return ssystem("%s %s", CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT,
+	if (ETH_NATIVE_POSIX_STARTUP_SCRIPT[0] == '\0') {
+		return 0;
+	}
+
+	if (ETH_NATIVE_POSIX_STARTUP_SCRIPT_USER[0] == '\0') {
+		return ssystem("%s %s", ETH_NATIVE_POSIX_STARTUP_SCRIPT,
 			       if_name);
 	} else {
 		return ssystem("sudo -u %s %s %s",
-			       CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT_USER,
-			       CONFIG_ETH_NATIVE_POSIX_STARTUP_SCRIPT,
+			       ETH_NATIVE_POSIX_STARTUP_SCRIPT_USER,
+			       ETH_NATIVE_POSIX_STARTUP_SCRIPT,
 			       if_name);
 	}
 }
@@ -187,17 +196,34 @@ int eth_clock_gettime(struct net_ptp_time *time)
 #if defined(CONFIG_NET_PROMISCUOUS_MODE)
 int eth_promisc_mode(const char *if_name, bool enable)
 {
+	if (!IS_ENABLED(CONFIG_ETH_NATIVE_POSIX_STARTUP_AUTOMATIC)) {
+		return 0;
+	}
+
 	return ssystem("ip link set dev %s promisc %s",
 		       if_name, enable ? "on" : "off");
 }
 #endif /* CONFIG_NET_PROMISCUOUS_MODE */
 
+/* If we have enabled manual setup, then interface cannot be
+ * taken up or down by the driver as we normally do not have
+ * enough permissions.
+ */
+
 int eth_if_up(const char *if_name)
 {
+	if (!IS_ENABLED(CONFIG_ETH_NATIVE_POSIX_STARTUP_AUTOMATIC)) {
+		return 0;
+	}
+
 	return ssystem("ip link set dev %s up", if_name);
 }
 
 int eth_if_down(const char *if_name)
 {
+	if (!IS_ENABLED(CONFIG_ETH_NATIVE_POSIX_STARTUP_AUTOMATIC)) {
+		return 0;
+	}
+
 	return ssystem("ip link set dev %s down", if_name);
 }

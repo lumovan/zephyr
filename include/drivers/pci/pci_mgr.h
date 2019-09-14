@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __inc_pci_mgr_h
-#define __inc_pci_mgr_h
+#ifndef ZEPHYR_INCLUDE_DRIVERS_PCI_PCI_MGR_H_
+#define ZEPHYR_INCLUDE_DRIVERS_PCI_PCI_MGR_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -541,7 +541,7 @@ union pci_dev {
  * +---------------------------------------------------------------------------+
  */
 
-union pci_cap_hdr {
+typedef union pci_cap_hdr {
 	struct {
 		/* offset 00:				*/
 		u32_t id : 8; /*   capability ID			*/
@@ -1515,9 +1515,9 @@ extern int pci_config_ext_cap_ptr_find(
 
 #define PCI_MSIX_FLAGS 2
 #define PCI_MSIX_FLAGS_QSIZE 0x7FF
-#define PCI_MSIX_FLAGS_ENABLE (1 << 15)
-#define PCI_MSIX_FLAGS_MASKALL (1 << 14)
-#define PCI_MSIX_FLAGS_BIRMASK (7 << 0)
+#define PCI_MSIX_FLAGS_ENABLE BIT(15)
+#define PCI_MSIX_FLAGS_MASKALL BIT(14)
+#define PCI_MSIX_FLAGS_BIRMASK BIT(0)
 #define PCI_MSIX_TABLE_OFFSET 0x4
 
 /* Macros to support Intel VT-d code */
@@ -1603,4 +1603,4 @@ extern int pci_config_ext_cap_ptr_find(
 }
 #endif /* __cplusplus */
 
-#endif /* __inc_pci_mgr_h */
+#endif /* ZEPHYR_INCLUDE_DRIVERS_PCI_PCI_MGR_H_ */

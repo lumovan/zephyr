@@ -99,12 +99,27 @@ SECTION_FUNC(TEXT, _rirq_exit)
 	mov	r1, exc_nest_count
 	ld	r0, [r1]
 	sub	r0, r0, 1
-	cmp	r0, 0
-	bne.d	_rirq_return_from_rirq
 	st	r0, [r1]
+	/*
+	 * using exc_nest_count to decide whether is nest int is not reliable.
+	 * a better option is to use IRQ_ACT
+	 * A case is:  a high priority int preempts a low priority int before
+	 * rirq_enter/firq_enter, then in _rirq_exit/_firq_exit, it will see
+	 * exc_nest_cout is 0, this will lead to possible thread switch, but
+	 * a low priority int is still pending.
+	 *
+	 * If multi bits in IRQ_ACT are set, i.e. last bit != fist bit, it's
+	 * in nest interrupt
+	 */
+	lr 	r0, [_ARC_V2_AUX_IRQ_ACT]
+	and 	r0, r0, 0xffff
+	ffs	r1, r0
+	fls	r2, r0
+	cmp	r1, r2
+	jne	_rirq_return_from_rirq
 
 #ifdef CONFIG_STACK_SENTINEL
-	bl _check_stack_sentinel
+	bl z_check_stack_sentinel
 #endif
 
 #ifdef CONFIG_PREEMPT_ENABLED
@@ -166,7 +181,23 @@ _rirq_common_interrupt_swap:
 	pop_s r2
 #endif
 
-	ld_s r3, [r2, _thread_offset_to_relinquish_cause]
+#if defined(CONFIG_USERSPACE)
+/*
+ * when USERSPACE is enabled, according to ARCv2 ISA, SP will be switched
+ * if interrupt comes out in user mode, and will be recorded in bit 31
+ * (U bit) of IRQ_ACT. when interrupt exits, SP will be switched back
+ * according to U bit.
+ *
+ * For the case that context switches in interrupt, the target sp must be
+ * thread's kernel stack, no need to do hardware sp switch. so, U bit should
+ * be cleared.
+ */
+	lr r0, [_ARC_V2_AUX_IRQ_ACT]
+	bclr r0, r0, 31
+	sr r0, [_ARC_V2_AUX_IRQ_ACT]
+#endif
+
+	ld r3, [r2, _thread_offset_to_relinquish_cause]
 
 	breq r3, _CAUSE_RIRQ, _rirq_return_from_rirq
 	nop
@@ -186,7 +217,7 @@ _rirq_return_from_coop:
 
 	/* update status32.ie (explanation in firq_exit:_firq_return_from_coop) */
 
-	ld_s r3, [r2, _thread_offset_to_intlock_key]
+	ld r3, [r2, _thread_offset_to_intlock_key]
 	st  0, [r2, _thread_offset_to_intlock_key]
 	cmp r3, 0
 	or.ne r0, r0, _ARC_V2_STATUS32_IE
@@ -197,8 +228,11 @@ _rirq_return_from_coop:
 	sub sp, sp, ___isf_t_pc_OFFSET
 
 	/* update return value on stack */
-	ld_s r0, [r2, _thread_offset_to_return_value]
+	ld r0, [r2, _thread_offset_to_return_value]
 	st_s r0, [sp, ___isf_t_r0_OFFSET]
+
+	/* reset zero-overhead loops */
+	st 0, [sp, ___isf_t_lp_end_OFFSET]
 
 	/*
 	 * r13 is part of both the callee and caller-saved register sets because

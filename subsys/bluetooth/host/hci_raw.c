@@ -13,6 +13,7 @@
 #include <bluetooth/hci_raw.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_CORE)
+#define LOG_MODULE_NAME bt_hci_raw
 #include "common/log.h"
 
 #include "hci_ecc.h"
@@ -60,6 +61,18 @@ struct net_buf *bt_buf_get_rx(enum bt_buf_type type, s32_t timeout)
 }
 
 struct net_buf *bt_buf_get_cmd_complete(s32_t timeout)
+{
+	struct net_buf *buf;
+
+	buf = net_buf_alloc(&hci_rx_pool, timeout);
+	if (buf) {
+		bt_buf_set_type(buf, BT_BUF_EVT);
+	}
+
+	return buf;
+}
+
+struct net_buf *bt_buf_get_evt(u8_t evt, bool discardable, s32_t timeout)
 {
 	struct net_buf *buf;
 

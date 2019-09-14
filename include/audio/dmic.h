@@ -7,8 +7,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __AUDIO_DMIC_H__
-#define __AUDIO_DMIC_H__
+#ifndef ZEPHYR_INCLUDE_AUDIO_DMIC_H_
+#define ZEPHYR_INCLUDE_AUDIO_DMIC_H_
 
 #include <kernel.h>
 #include <device.h>
@@ -167,7 +167,7 @@ static inline u32_t dmic_build_channel_map(u8_t channel, u8_t pdm,
 		enum pdm_lr lr)
 {
 	return ((((pdm & BIT_MASK(3)) << 1) | lr) <<
-			((channel & BIT_MASK(3)) * 4));
+			((channel & BIT_MASK(3)) * 4U));
 }
 
 /**
@@ -190,7 +190,7 @@ static inline void dmic_parse_channel_map(u32_t channel_map_lo,
 	u32_t channel_map;
 
 	channel_map = (channel < 8) ? channel_map_lo : channel_map_hi;
-	channel_map >>= ((channel & BIT_MASK(3)) * 4);
+	channel_map >>= ((channel & BIT_MASK(3)) * 4U);
 
 	*pdm = (channel >> 1) & BIT_MASK(3);
 	*lr = channel & BIT(0);
@@ -209,7 +209,7 @@ static inline void dmic_parse_channel_map(u32_t channel_map_lo,
  */
 static inline u32_t dmic_build_clk_skew_map(u8_t pdm, u8_t skew)
 {
-	return ((skew & BIT_MASK(4)) << ((pdm & BIT_MASK(3)) * 4));
+	return ((skew & BIT_MASK(4)) << ((pdm & BIT_MASK(3)) * 4U));
 }
 
 /**
@@ -273,4 +273,4 @@ static inline int dmic_read(struct device *dev, u8_t stream, void **buffer,
 }
 #endif
 
-#endif /* __AUDIO_DMIC_H__ */
+#endif /* ZEPHYR_INCLUDE_AUDIO_DMIC_H_ */

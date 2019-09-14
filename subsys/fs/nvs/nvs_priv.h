@@ -11,10 +11,6 @@
 extern "C" {
 #endif
 
-#define SYS_LOG_DOMAIN "fs/nvs"
-#define SYS_LOG_LEVEL CONFIG_NVS_LOG_LEVEL
-#include <logging/sys_log.h>
-
 /*
  * MASKS AND SHIFT FOR ADDRESSES
  * an address in nvs is an u32_t where:
@@ -30,16 +26,20 @@ extern "C" {
  */
 #define NVS_STATUS_NOSPACE 1
 
-#define NVS_BLOCK_SIZE 8
+#define NVS_BLOCK_SIZE 32
 
 /* Allocation Table Entry */
 struct nvs_ate {
 	u16_t id;	/* data id */
-	u16_t offset;	/* data offset in sector */
-	u16_t len;	/* data len in sector */
+	u16_t offset;	/* data offset within sector */
+	u16_t len;	/* data len within sector */
 	u8_t part;	/* part of a multipart data - future extension */
 	u8_t crc8;	/* crc8 check of the entry */
-};
+} __packed;
+
+BUILD_ASSERT_MSG(offsetof(struct nvs_ate, crc8) ==
+		 sizeof(struct nvs_ate) - sizeof(u8_t),
+		 "crc8 must be the last member");
 
 #ifdef __cplusplus
 }

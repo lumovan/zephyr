@@ -4,20 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, CONFIG_NET_MGMT_EVENT_LOG_LEVEL);
+
 #include <zephyr.h>
 #include <tc_util.h>
 #include <errno.h>
 #include <toolchain.h>
 #include <linker/sections.h>
 
+#include <net/dummy.h>
 #include <net/net_mgmt.h>
 #include <net/net_pkt.h>
 #include <ztest.h>
 
+#define TEST_INFO_STRING "mgmt event info"
+
 #define TEST_MGMT_REQUEST		0x17AB1234
 #define TEST_MGMT_EVENT			0x97AB1234
 #define TEST_MGMT_EVENT_UNHANDLED	0x97AB4321
-#define TEST_MGMT_EVENT_INFO_SIZE	sizeof("mgmt event info")
+#define TEST_MGMT_EVENT_INFO_SIZE	\
+	MAX(sizeof(TEST_INFO_STRING), sizeof(struct in6_addr))
 
 /* Notifier infra */
 static u32_t event2throw;
@@ -31,12 +38,14 @@ static struct k_sem thrower_lock;
 /* Receiver infra */
 static u32_t rx_event;
 static u32_t rx_calls;
+static size_t info_length_in_test;
 static struct net_mgmt_event_callback rx_cb;
+static char *info_string = TEST_INFO_STRING;
 
 static struct in6_addr addr6 = { { { 0xfe, 0x80, 0, 0, 0, 0, 0, 0,
 				     0, 0, 0, 0, 0, 0, 0, 0x1 } } };
 
-static char info_data[TEST_MGMT_EVENT_INFO_SIZE] = "mgmt event info";
+static char info_data[TEST_MGMT_EVENT_INFO_SIZE];
 
 static int test_mgmt_request(u32_t mgmt_request,
 			     struct net_if *iface, void *data, u32_t len)
@@ -46,7 +55,7 @@ static int test_mgmt_request(u32_t mgmt_request,
 	ARG_UNUSED(iface);
 
 	if (len == sizeof(u32_t)) {
-		*test_data = 1;
+		*test_data = 1U;
 
 		return 0;
 	}
@@ -70,15 +79,13 @@ static void fake_iface_init(struct net_if *iface)
 	net_if_set_link_addr(iface, mac, 8, NET_LINK_DUMMY);
 }
 
-static int fake_iface_send(struct net_if *iface, struct net_pkt *pkt)
+static int fake_iface_send(struct device *dev, struct net_pkt *pkt)
 {
-	net_pkt_unref(pkt);
-
-	return NET_OK;
+	return 0;
 }
 
-static struct net_if_api fake_iface_api = {
-	.init = fake_iface_init,
+static struct dummy_api fake_iface_api = {
+	.iface_api.init = fake_iface_init,
 	.send = fake_iface_send,
 };
 
@@ -88,7 +95,7 @@ NET_DEVICE_INIT(net_event_test, "net_event_test",
 
 void test_requesting_nm(void)
 {
-	u32_t data = 0;
+	u32_t data = 0U;
 
 	TC_PRINT("- Request Net MGMT\n");
 
@@ -127,8 +134,12 @@ static void receiver_cb(struct net_mgmt_event_callback *cb,
 	TC_PRINT("\t\tReceived event 0x%08X\n", nm_event);
 
 	if (with_info && cb->info) {
-		if (memcmp(info_data, cb->info,
-			   TEST_MGMT_EVENT_INFO_SIZE)) {
+		if (cb->info_length != info_length_in_test) {
+			rx_calls = (u32_t) -1;
+			return;
+		}
+
+		if (memcmp(info_data, cb->info, info_length_in_test)) {
 			rx_calls = (u32_t) -1;
 			return;
 		}
@@ -140,8 +151,6 @@ static void receiver_cb(struct net_mgmt_event_callback *cb,
 
 static int sending_event(u32_t times, bool receiver, bool info)
 {
-	int ret = TC_PASS;
-
 	TC_PRINT("- Sending event %u times, %s a receiver, %s info\n",
 		 times, receiver ? "with" : "without",
 		 info ? "with" : "without");
@@ -166,10 +175,10 @@ static int sending_event(u32_t times, bool receiver, bool info)
 		zassert_equal(rx_calls, times, "rx_calls check failed");
 
 		net_mgmt_del_event_callback(&rx_cb);
-		rx_event = rx_calls = 0;
+		rx_event = rx_calls = 0U;
 	}
 
-	return ret;
+	return TC_PASS;
 }
 
 static int test_sending_event(u32_t times, bool receiver)
@@ -201,9 +210,9 @@ static int test_synchronous_event_listener(u32_t times, bool on_iface)
 	if (on_iface) {
 		ret = net_mgmt_event_wait_on_iface(net_if_get_default(),
 						   event_mask, NULL, NULL,
-						   K_SECONDS(1));
+						   NULL, K_SECONDS(1));
 	} else {
-		ret = net_mgmt_event_wait(event_mask, NULL, NULL, NULL,
+		ret = net_mgmt_event_wait(event_mask, NULL, NULL, NULL, NULL,
 					  K_SECONDS(1));
 	}
 
@@ -220,15 +229,18 @@ static int test_synchronous_event_listener(u32_t times, bool on_iface)
 
 static void initialize_event_tests(void)
 {
-	event2throw = 0;
-	throw_times = 0;
+	event2throw = 0U;
+	throw_times = 0U;
 	throw_sleep = K_NO_WAIT;
 	with_info = false;
 
-	rx_event = 0;
-	rx_calls = 0;
+	rx_event = 0U;
+	rx_calls = 0U;
 
 	k_sem_init(&thrower_lock, 0, UINT_MAX);
+
+	info_length_in_test = TEST_MGMT_EVENT_INFO_SIZE;
+	memcpy(info_data, info_string, strlen(info_string) + 1);
 
 	net_mgmt_init_event_callback(&rx_cb, receiver_cb, TEST_MGMT_EVENT);
 
@@ -240,9 +252,10 @@ static void initialize_event_tests(void)
 
 static int test_core_event(u32_t event, bool (*func)(void))
 {
-	int ret = TC_PASS;
-
 	TC_PRINT("- Triggering core event: 0x%08X\n", event);
+
+	info_length_in_test = sizeof(struct in6_addr);
+	memcpy(info_data, &addr6, sizeof(addr6));
 
 	net_mgmt_init_event_callback(&rx_cb, receiver_cb, event);
 
@@ -252,13 +265,14 @@ static int test_core_event(u32_t event, bool (*func)(void))
 
 	k_yield();
 
-	zassert_true(rx_calls, "rx_calls empty");
-	zassert_equal(rx_event, event, "rx_event check failed");
+	zassert_true(rx_calls > 0 && rx_calls != -1, "rx_calls empty");
+	zassert_equal(rx_event, event, "rx_event check failed, "
+		      "0x%08x vs 0x%08x", rx_event, event);
 
 	net_mgmt_del_event_callback(&rx_cb);
-	rx_event = rx_calls = 0;
+	rx_event = rx_calls = 0U;
 
-	return ret;
+	return TC_PASS;
 }
 
 static bool _iface_ip6_add(void)

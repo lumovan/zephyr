@@ -5,13 +5,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef DRIVERS_FLASH_STM32_H
-#define DRIVERS_FLASH_STM32_H
+#ifndef ZEPHYR_DRIVERS_FLASH_FLASH_STM32_H_
+#define ZEPHYR_DRIVERS_FLASH_FLASH_STM32_H_
 
 #include <flash_registers.h>
 
 #if defined(CONFIG_SOC_SERIES_STM32L4X) || \
-	defined(CONFIG_SOC_SERIES_STM32F0X)
+	defined(CONFIG_SOC_SERIES_STM32F0X) || \
+	defined(CONFIG_SOC_SERIES_STM32F3X)
 #include <clock_control.h>
 #include <clock_control/stm32_clock_control.h>
 #endif
@@ -21,8 +22,14 @@ struct flash_stm32_priv {
 	struct stm32f0x_flash *regs;
 	/* clock subsystem driving this peripheral */
 	struct stm32_pclken pclken;
+#elif defined(CONFIG_SOC_SERIES_STM32F3X)
+	struct stm32f3x_flash *regs;
+	/* clock subsystem driving this peripheral */
+	struct stm32_pclken pclken;
 #elif defined(CONFIG_SOC_SERIES_STM32F4X)
 	struct stm32f4x_flash *regs;
+#elif defined(CONFIG_SOC_SERIES_STM32F7X)
+	struct stm32f7x_flash *regs;
 #elif defined(CONFIG_SOC_SERIES_STM32L4X)
 	struct stm32l4x_flash *regs;
 	/* clock subsystem driving this peripheral */
@@ -63,4 +70,4 @@ void flash_stm32_page_layout(struct device *dev,
 			     size_t *layout_size);
 #endif
 
-#endif /* DRIVERS_FLASH_STM32_H */
+#endif /* ZEPHYR_DRIVERS_FLASH_FLASH_STM32_H_ */

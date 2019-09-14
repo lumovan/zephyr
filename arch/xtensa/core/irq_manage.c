@@ -27,7 +27,7 @@
  * @return N/A
  */
 
-void _irq_priority_set(unsigned int irq, unsigned int prio, u32_t flags)
+void z_irq_priority_set(unsigned int irq, unsigned int prio, u32_t flags)
 {
 	__ASSERT(prio < XCHAL_EXCM_LEVEL + 1,
 		 "invalid priority %d! values must be less than %d\n",
@@ -36,3 +36,16 @@ void _irq_priority_set(unsigned int irq, unsigned int prio, u32_t flags)
 	 * Xtensa
 	 */
 }
+
+#ifdef CONFIG_DYNAMIC_INTERRUPTS
+int z_arch_irq_connect_dynamic(unsigned int irq, unsigned int priority,
+			      void (*routine)(void *parameter), void *parameter,
+			      u32_t flags)
+{
+	ARG_UNUSED(flags);
+	ARG_UNUSED(priority);
+
+	z_isr_install(irq, routine, parameter);
+	return irq;
+}
+#endif /* CONFIG_DYNAMIC_INTERRUPTS */

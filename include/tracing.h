@@ -3,8 +3,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef _KERNEL_TRACE_H
-#define _KERNEL_TRACE_H
+#ifndef ZEPHYR_INCLUDE_TRACING_H_
+#define ZEPHYR_INCLUDE_TRACING_H_
 
 #include <kernel.h>
 
@@ -21,12 +21,21 @@
 #if CONFIG_TRACING
 void z_sys_trace_idle(void);
 void z_sys_trace_isr_enter(void);
+void z_sys_trace_isr_exit(void);
 void z_sys_trace_isr_exit_to_scheduler(void);
 void z_sys_trace_thread_switched_in(void);
+void z_sys_trace_thread_switched_out(void);
 #endif
 
 #ifdef CONFIG_SEGGER_SYSTEMVIEW
 #include "tracing_sysview.h"
+
+#elif defined CONFIG_TRACING_CPU_STATS
+#include "tracing_cpu_stats.h"
+
+#elif defined CONFIG_TRACING_CTF
+#include "tracing_ctf.h"
+
 #else
 
 /**
@@ -113,14 +122,17 @@ void z_sys_trace_thread_switched_in(void);
 #define sys_trace_end_call(id)
 
 
-
 #define z_sys_trace_idle()
 
 #define z_sys_trace_isr_enter()
 
+#define z_sys_trace_isr_exit()
+
 #define z_sys_trace_isr_exit_to_scheduler()
 
 #define z_sys_trace_thread_switched_in()
+
+#define z_sys_trace_thread_switched_out()
 
 #endif
 #endif

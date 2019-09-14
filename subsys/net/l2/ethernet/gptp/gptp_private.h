@@ -18,15 +18,11 @@
 extern "C" {
 #endif
 
-#if defined(CONFIG_NET_GPTP)
-
 #include <net/gptp.h>
 
 /* Common defines for the gPTP stack. */
 #define GPTP_THREAD_WAIT_TIMEOUT_MS 1
 #define GPTP_MULTIPLE_PDELAY_RESP_WAIT K_MINUTES(5)
-
-#define USCALED_NS_TO_MS(val) ((val >> 16) / 1000000)
 
 #if defined(CONFIG_NET_GPTP_STATISTICS)
 #define GPTP_STATS_INC(port, var) (GPTP_PORT_PARAM_DS(port)->var++)
@@ -127,9 +123,15 @@ static inline u64_t gptp_timestamp_to_nsec(struct net_ptp_time *ts)
  * @param port Port number of the clock to use.
  * @param state New state
  */
+#if CONFIG_NET_GPTP_LOG_LEVEL < LOG_LEVEL_DBG
 void gptp_change_port_state(int port, enum gptp_port_state state);
+#else
+#define gptp_change_port_state(port, state)			\
+	gptp_change_port_state_debug(port, state, __func__, __LINE__)
 
-#endif /* CONFIG_NET_GPTP */
+void gptp_change_port_state_debug(int port, enum gptp_port_state state,
+				  const char *caller, int line);
+#endif
 
 #ifdef __cplusplus
 }

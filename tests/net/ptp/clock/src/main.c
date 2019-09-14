@@ -6,6 +6,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define NET_LOG_LEVEL CONFIG_NET_L2_ETHERNET_LOG_LEVEL
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
+
 #include <zephyr/types.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -27,7 +32,7 @@
 #define NET_LOG_ENABLED 1
 #include "net_private.h"
 
-#if defined(CONFIG_NET_DEBUG_L2_ETHERNET)
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 #define DBG(fmt, ...) printk(fmt, ##__VA_ARGS__)
 #else
 #define DBG(fmt, ...)
@@ -88,9 +93,9 @@ static void eth_iface_init(struct net_if *iface)
 	ethernet_init(iface);
 }
 
-static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
+static int eth_tx(struct device *dev, struct net_pkt *pkt)
 {
-	struct eth_context *context = net_if_get_device(iface)->driver_data;
+	struct eth_context *context = dev->driver_data;
 
 	if (&eth_context_1 != context && &eth_context_2 != context) {
 		zassert_true(false, "Context pointers do not match\n");
@@ -102,11 +107,9 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 	}
 
 	if (test_started) {
-
 		k_sem_give(&wait_data);
 	}
 
-	net_pkt_unref(pkt);
 
 	return 0;
 }
@@ -125,10 +128,10 @@ static struct device *eth_get_ptp_clock(struct device *dev)
 
 static struct ethernet_api api_funcs = {
 	.iface_api.init = eth_iface_init,
-	.iface_api.send = eth_tx,
 
 	.get_capabilities = eth_capabilities,
 	.get_ptp_clock = eth_get_ptp_clock,
+	.send = eth_tx,
 };
 
 static void generate_mac(u8_t *mac_addr)
@@ -152,13 +155,16 @@ static int eth_init(struct device *dev)
 }
 
 ETH_NET_DEVICE_INIT(eth_test_1, "eth_test_1", eth_init, &eth_context_1, NULL,
-		    CONFIG_ETH_INIT_PRIORITY, &api_funcs, 1500);
+		    CONFIG_ETH_INIT_PRIORITY, &api_funcs,
+		    NET_ETH_MTU);
 
 ETH_NET_DEVICE_INIT(eth_test_2, "eth_test_2", eth_init, &eth_context_2, NULL,
-		    CONFIG_ETH_INIT_PRIORITY, &api_funcs, 1500);
+		    CONFIG_ETH_INIT_PRIORITY, &api_funcs,
+		    NET_ETH_MTU);
 
 ETH_NET_DEVICE_INIT(eth_test_3, "eth_test_3", eth_init, &eth_context_3, NULL,
-		    CONFIG_ETH_INIT_PRIORITY, &api_funcs, 1500);
+		    CONFIG_ETH_INIT_PRIORITY, &api_funcs,
+		    NET_ETH_MTU);
 
 static u64_t timestamp_to_nsec(struct net_ptp_time *ts)
 {
@@ -252,7 +258,7 @@ struct user_data {
 	int total_if_count;
 };
 
-#if defined(CONFIG_NET_DEBUG_L2_ETHERNET)
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 static const char *iface2str(struct net_if *iface)
 {
 #ifdef CONFIG_NET_L2_ETHERNET
@@ -421,7 +427,7 @@ static void test_ptp_clock_iface(int idx)
 
 	ptp_clock_adjust(clk, rnd_value);
 
-	memset(&tm, 0, sizeof(tm));
+	(void)memset(&tm, 0, sizeof(tm));
 	ptp_clock_get(clk, &tm);
 
 	new_value = timestamp_to_nsec(&tm);

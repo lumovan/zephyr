@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_L2_IEEE802154)
-#define SYS_LOG_DOMAIN "net/ieee802154"
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_ieee802154_security,
+		    CONFIG_NET_L2_IEEE802154_LOG_LEVEL);
 
 #include <crypto/cipher.h>
 #include <net/net_core.h>
@@ -176,8 +175,8 @@ int ieee802154_security_init(struct ieee802154_security_ctx *sec_ctx)
 {
 	struct device *dev;
 
-	memset(&sec_ctx->enc, 0, sizeof(struct cipher_ctx));
-	memset(&sec_ctx->dec, 0, sizeof(struct cipher_ctx));
+	(void)memset(&sec_ctx->enc, 0, sizeof(struct cipher_ctx));
+	(void)memset(&sec_ctx->dec, 0, sizeof(struct cipher_ctx));
 
 	dev = device_get_binding(
 		CONFIG_NET_L2_IEEE802154_SECURITY_CRYPTO_DEV_NAME);
@@ -188,8 +187,8 @@ int ieee802154_security_init(struct ieee802154_security_ctx *sec_ctx)
 	sec_ctx->enc.flags = cipher_query_hwcaps(dev);
 	sec_ctx->dec.flags = cipher_query_hwcaps(dev);
 
-	sec_ctx->enc.mode_params.ccm_info.nonce_len = 13;
-	sec_ctx->dec.mode_params.ccm_info.nonce_len = 13;
+	sec_ctx->enc.mode_params.ccm_info.nonce_len = 13U;
+	sec_ctx->dec.mode_params.ccm_info.nonce_len = 13U;
 
 	sec_ctx->enc.device = dev;
 	sec_ctx->dec.device = dev;

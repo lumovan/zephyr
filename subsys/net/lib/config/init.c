@@ -6,11 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_APP)
-#define SYS_LOG_DOMAIN "net/app"
-#define NET_SYS_LOG_LEVEL SYS_LOG_LEVEL_DEBUG
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_config, CONFIG_NET_CONFIG_LOG_LEVEL);
 
 #include <zephyr.h>
 #include <init.h>
@@ -18,6 +15,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#include <logging/log_backend.h>
 #include <net/net_core.h>
 #include <net/net_ip.h>
 #include <net/net_if.h>
@@ -30,6 +28,8 @@
 #include "ieee802154_settings.h"
 #include "bt_settings.h"
 
+extern const struct log_backend *log_backend_net_get(void);
+
 static K_SEM_DEFINE(waiter, 0, 1);
 static struct k_sem counter;
 
@@ -40,7 +40,7 @@ static void ipv4_addr_add_handler(struct net_mgmt_event_callback *cb,
 				  u32_t mgmt_event,
 				  struct net_if *iface)
 {
-#if defined(CONFIG_NET_DEBUG_APP) && CONFIG_SYS_LOG_NET_LEVEL > 2
+#if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 	char hr_addr[NET_IPV4_ADDR_LEN];
 #endif
 	int i;
@@ -57,19 +57,21 @@ static void ipv4_addr_add_handler(struct net_mgmt_event_callback *cb,
 			continue;
 		}
 
-#if defined(CONFIG_NET_DEBUG_APP) && CONFIG_SYS_LOG_NET_LEVEL > 2
+#if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 		NET_INFO("IPv4 address: %s",
-			 net_addr_ntop(AF_INET, &if_addr->address.in_addr,
-				       hr_addr, NET_IPV4_ADDR_LEN));
+			 log_strdup(net_addr_ntop(AF_INET,
+						  &if_addr->address.in_addr,
+						  hr_addr, sizeof(hr_addr))));
 		NET_INFO("Lease time: %u seconds",
 			 iface->config.dhcpv4.lease_time);
 		NET_INFO("Subnet: %s",
-			 net_addr_ntop(AF_INET,
+			 log_strdup(net_addr_ntop(AF_INET,
 				       &iface->config.ip.ipv4->netmask,
-				       hr_addr, NET_IPV4_ADDR_LEN));
+				       hr_addr, sizeof(hr_addr))));
 		NET_INFO("Router: %s",
-			 net_addr_ntop(AF_INET, &iface->config.ip.ipv4->gw,
-				       hr_addr, NET_IPV4_ADDR_LEN));
+			 log_strdup(net_addr_ntop(AF_INET,
+						  &iface->config.ip.ipv4->gw,
+						  hr_addr, sizeof(hr_addr))));
 #endif
 		break;
 	}
@@ -102,7 +104,7 @@ static void setup_dhcpv4(struct net_if *iface)
 
 static void setup_ipv4(struct net_if *iface)
 {
-#if defined(CONFIG_NET_DEBUG_APP) && CONFIG_SYS_LOG_NET_LEVEL > 2
+#if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 	char hr_addr[NET_IPV4_ADDR_LEN];
 #endif
 	struct in_addr addr;
@@ -133,9 +135,10 @@ static void setup_ipv4(struct net_if *iface)
 	net_if_ipv4_addr_add(iface, &addr, NET_ADDR_MANUAL, 0);
 #endif
 
-#if defined(CONFIG_NET_DEBUG_APP) && CONFIG_SYS_LOG_NET_LEVEL > 2
+#if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 	NET_INFO("IPv4 address: %s",
-		 net_addr_ntop(AF_INET, &addr, hr_addr, NET_IPV4_ADDR_LEN));
+		 log_strdup(net_addr_ntop(AF_INET, &addr, hr_addr,
+					  sizeof(hr_addr))));
 #endif
 
 	if (sizeof(CONFIG_NET_CONFIG_MY_IPV4_NETMASK) > 1) {
@@ -198,7 +201,7 @@ static void ipv6_event_handler(struct net_mgmt_event_callback *cb,
 	}
 
 	if (mgmt_event == NET_EVENT_IPV6_DAD_SUCCEED) {
-#if defined(CONFIG_NET_DEBUG_APP) && CONFIG_SYS_LOG_NET_LEVEL > 2
+#if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 		char hr_addr[NET_IPV6_ADDR_LEN];
 #endif
 		struct net_if_addr *ifaddr;
@@ -211,10 +214,10 @@ static void ipv6_event_handler(struct net_mgmt_event_callback *cb,
 			return;
 		}
 
-#if defined(CONFIG_NET_DEBUG_APP) && CONFIG_SYS_LOG_NET_LEVEL > 2
+#if CONFIG_NET_CONFIG_LOG_LEVEL >= LOG_LEVEL_INF
 		NET_INFO("IPv6 address: %s",
-			 net_addr_ntop(AF_INET6, &laddr, hr_addr,
-				       NET_IPV6_ADDR_LEN));
+			 log_strdup(net_addr_ntop(AF_INET6, &laddr, hr_addr,
+						  NET_IPV6_ADDR_LEN)));
 #endif
 
 		k_sem_take(&counter, K_NO_WAIT);
@@ -286,7 +289,7 @@ int net_config_init(const char *app_info, u32_t flags, s32_t timeout)
 	int count = 0;
 
 	if (app_info) {
-		NET_INFO("%s", app_info);
+		NET_INFO("%s", log_strdup(app_info));
 	}
 
 	if (!iface) {
@@ -337,31 +340,22 @@ int net_config_init(const char *app_info, u32_t flags, s32_t timeout)
 	return 0;
 }
 
-/* From subsys/logging/sys_log_net.c */
-extern void syslog_net_hook_install(void);
-static inline void syslog_net_init(void)
-{
-#if defined(CONFIG_SYS_LOG_BACKEND_NET)
-	syslog_net_hook_install();
-#endif
-}
-
 #if defined(CONFIG_NET_CONFIG_AUTO_INIT)
-static int init_net_app(struct device *device)
+static int init_app(struct device *device)
 {
-	u32_t flags = 0;
+	u32_t flags = 0U;
 	int ret;
 
 	ARG_UNUSED(device);
 
 #if defined(CONFIG_NET_IPV6)
 	/* IEEE 802.15.4 is only usable if IPv6 is enabled */
-	ret = _net_config_ieee802154_setup();
+	ret = z_net_config_ieee802154_setup();
 	if (ret < 0) {
 		NET_ERR("Cannot setup IEEE 802.15.4 interface (%d)", ret);
 	}
 
-	ret = _net_config_bt_setup();
+	ret = z_net_config_bt_setup();
 	if (ret < 0) {
 		NET_ERR("Cannot setup Bluetooth interface (%d)", ret);
 	}
@@ -389,10 +383,16 @@ static int init_net_app(struct device *device)
 	/* This is activated late as it requires the network stack to be up
 	 * and running before syslog messages can be sent to network.
 	 */
-	syslog_net_init();
+	if (IS_ENABLED(CONFIG_LOG_BACKEND_NET)) {
+		const struct log_backend *backend = log_backend_net_get();
+
+		if (!log_backend_is_active(backend)) {
+			log_backend_activate(backend, NULL);
+		}
+	}
 
 	return ret;
 }
 
-SYS_INIT(init_net_app, APPLICATION, CONFIG_NET_CONFIG_INIT_PRIO);
+SYS_INIT(init_app, APPLICATION, CONFIG_NET_CONFIG_INIT_PRIO);
 #endif /* CONFIG_NET_CONFIG_AUTO_INIT */

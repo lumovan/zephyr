@@ -6,8 +6,8 @@
  *
  */
 
-#ifndef _STM32_I2C_H_
-#define _STM32_I2C_H_
+#ifndef ZEPHYR_DRIVERS_I2C_I2C_LL_STM32_H_
+#define ZEPHYR_DRIVERS_I2C_I2C_LL_STM32_H_
 
 typedef void (*irq_config_func_t)(struct device *port);
 
@@ -24,6 +24,7 @@ struct i2c_stm32_data {
 #ifdef CONFIG_I2C_STM32_INTERRUPT
 	struct k_sem device_sync_sem;
 #endif
+	struct k_sem bus_mutex;
 	u32_t dev_config;
 #ifdef CONFIG_I2C_STM32_V1
 	u16_t slave_address;
@@ -72,4 +73,4 @@ int i2c_stm32_slave_unregister(struct device *dev,
 #define DEV_CFG(dev)	\
 ((const struct i2c_stm32_config * const)(dev)->config->config_info)
 
-#endif	/* _STM32_I2C_H_ */
+#endif	/* ZEPHYR_DRIVERS_I2C_I2C_LL_STM32_H_ */

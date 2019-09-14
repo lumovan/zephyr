@@ -5,29 +5,14 @@
 #
 config CMSIS_RTOS_V1
 	bool "CMSIS RTOS v1 API"
-	default n
+	depends on THREAD_CUSTOM_DATA
+	depends on POLL
 	help
 	  This enables CMSIS RTOS v1 API support. This is an OS-integration
 	  layer which allows applications using CMSIS RTOS APIs to build on
 	  Zephyr.
 
 if CMSIS_RTOS_V1
-config  THREAD_CUSTOM_DATA
-	bool "Thread custom data"
-	default y
-	help
-	  This option allows each thread to store 32 bits of custom data,
-	  which can be accessed using the k_thread_custom_data_xxx() APIs.
-
-config POLL
-	bool "Async I/O Framework"
-	default y
-	help
-	  Asynchronous notification framework. Enable the k_poll() and
-	  k_poll_signal() APIs.  The former can wait on multiple events
-	  concurrently, which can be either directly triggered or triggered by
-	  the availability of some kernel objects (semaphores and fifos).
-
 config CMSIS_MAX_THREAD_COUNT
 	int "Maximum thread count in CMSIS RTOS application"
 	default 10
@@ -39,6 +24,7 @@ config CMSIS_MAX_THREAD_COUNT
 
 config CMSIS_THREAD_MAX_STACK_SIZE
 	int "Max stack size threads can be allocated in CMSIS RTOS application"
+	default 4096 if COVERAGE
 	default 512
 	help
 	  Mention max stack size threads can be allocated in CMSIS RTOS application.
@@ -63,8 +49,4 @@ config CMSIS_SEMAPHORE_MAX_COUNT
 	range 0 255
 	help
 	  Mention maximum number of semaphores in CMSIS compliant application.
-
-config NUM_PREEMPT_PRIORITIES
-	int
-	default 7
 endif

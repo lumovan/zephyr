@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_ethernet_stats, CONFIG_NET_L2_ETHERNET_LOG_LEVEL);
+
 #include <kernel.h>
 #include <string.h>
 #include <errno.h>

@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _IPM_CONSOLE_H_
-#define _IPM_CONSOLE_H_
+#ifndef ZEPHYR_INCLUDE_DRIVERS_CONSOLE_IPM_CONSOLE_H_
+#define ZEPHYR_INCLUDE_DRIVERS_CONSOLE_IPM_CONSOLE_H_
 
 #include <kernel.h>
 #include <device.h>
@@ -17,8 +17,8 @@
 extern "C" {
 #endif
 
-#define IPM_CONSOLE_STDOUT	(1 << 0)
-#define IPM_CONSOLE_PRINTK	(1 << 1)
+#define IPM_CONSOLE_STDOUT	(BIT(0))
+#define IPM_CONSOLE_PRINTK	(BIT(1))
 
 /*
  * Good way to determine these numbers other than trial-and-error?
@@ -105,4 +105,4 @@ int ipm_console_sender_init(struct device *d);
 }
 #endif
 
-#endif /* _IPM_CONSOLE_H_ */
+#endif /* ZEPHYR_INCLUDE_DRIVERS_CONSOLE_IPM_CONSOLE_H_ */

@@ -4,6 +4,23 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+config	POSIX_MAX_FDS
+	int "Maximum number of open file descriptors"
+	default 16 if POSIX_API
+	default 4
+	help
+	  Maximum number of open file descriptors, this includes
+	  files, sockets, special devices, etc.
+
+config POSIX_API
+	depends on !ARCH_POSIX
+	bool "POSIX APIs"
+	help
+	  Enable mostly-standards-compliant implementations of
+	  various POSIX (IEEE 1003.1) APIs.
+
+if POSIX_API
+
 config PTHREAD_IPC
 	bool "POSIX pthread IPC API"
 	help
@@ -25,6 +42,8 @@ config SEM_VALUE_MAX
 	range 1 32767
 	help
 	  Maximum semaphore count in POSIX compliant Application.
+
+endif # PTHREAD_IPC
 
 config MAX_TIMER_COUNT
 	int "Maximum timer count in POSIX application"
@@ -65,15 +84,16 @@ if FILE_SYSTEM
 config POSIX_FS
 	bool "Enable POSIX file system API support"
 	help
-	  This enabled POSIX style file system related APIs.
+	  This enables POSIX style file system related APIs.
 
 if POSIX_FS
 config	POSIX_MAX_OPEN_FILES
 	int "Maximum number of open file descriptors"
 	default 16
 	help
-	  Mention maximum number of open file descriptors.
+	  Maximum number of open files. Note that this setting
+	  is additionally bounded by CONFIG_POSIX_MAX_FDS.
 endif
-endif
+endif # FILE_SYSTEM
 
-endif
+endif # POSIX_API

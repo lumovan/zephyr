@@ -5,10 +5,12 @@
  */
 
 #include <ztest.h>
+#include "test_sched.h"
 
-#define STACK_SIZE 512
 #define NUM_THREAD 3
-static K_THREAD_STACK_ARRAY_DEFINE(tstack, NUM_THREAD, STACK_SIZE);
+
+BUILD_ASSERT(NUM_THREAD <= MAX_NUM_THREAD);
+
 /* slice size in millisecond*/
 #define SLICE_SIZE 200
 /* busy for more than one slice*/
@@ -32,8 +34,8 @@ static void thread_tslice(void *p1, void *p2, void *p3)
 		expected_slice_max = HALF_SLICE_SIZE;
 	} else {
 		/*other threads are sliced with tick granulity*/
-		expected_slice_min = __ticks_to_ms(_ms_to_ticks(SLICE_SIZE));
-		expected_slice_max = __ticks_to_ms(_ms_to_ticks(SLICE_SIZE)+1);
+		expected_slice_min = __ticks_to_ms(z_ms_to_ticks(SLICE_SIZE));
+		expected_slice_max = __ticks_to_ms(z_ms_to_ticks(SLICE_SIZE)+1);
 	}
 
 	#ifdef CONFIG_DEBUG
@@ -42,22 +44,22 @@ static void thread_tslice(void *p1, void *p2, void *p3)
 	#endif
 
 	/** TESTPOINT: timeslice should be reset for each preemptive thread*/
-	zassert_true(t >= expected_slice_min, NULL);
-	zassert_true(t <= expected_slice_max, NULL);
+#ifndef CONFIG_COVERAGE
+	zassert_true(t >= expected_slice_min,
+		     "timeslice too small, expected %u got %u",
+		     expected_slice_min, t);
+	zassert_true(t <= expected_slice_max,
+		     "timeslice too big, expected %u got %u",
+		     expected_slice_max, t);
+#else
+	(void)t;
+#endif /* CONFIG_COVERAGE */
 	thread_idx = (thread_idx + 1) % NUM_THREAD;
-
-	u32_t t32 = k_uptime_get_32();
 
 	/* Keep the current thread busy for more than one slice, even though,
 	 * when timeslice used up the next thread should be scheduled in.
 	 */
-	while (k_uptime_get_32() - t32 < BUSY_MS) {
-#if defined(CONFIG_ARCH_POSIX)
-		posix_halt_cpu(); /*sleep until next irq*/
-#else
-		;
-#endif
-	}
+	spin_for_ms(BUSY_MS);
 	k_sem_give(&sema);
 }
 
@@ -92,7 +94,7 @@ void test_slice_reset(void)
 		k_thread_priority_set(k_current_get(), K_PRIO_PREEMPT(j));
 		/* create delayed threads with equal preemptive priority*/
 		for (int i = 0; i < NUM_THREAD; i++) {
-			tid[i] = k_thread_create(&t[i], tstack[i], STACK_SIZE,
+			tid[i] = k_thread_create(&t[i], tstacks[i], STACK_SIZE,
 						 thread_tslice, NULL, NULL, NULL,
 						 K_PRIO_PREEMPT(j), 0, 0);
 		}
@@ -104,7 +106,7 @@ void test_slice_reset(void)
 		t32 = k_uptime_get_32();
 		while (k_uptime_get_32() - t32 < HALF_SLICE_SIZE) {
 #if defined(CONFIG_ARCH_POSIX)
-			posix_halt_cpu(); /*sleep until next irq*/
+			k_busy_wait(50);
 #else
 			;
 #endif

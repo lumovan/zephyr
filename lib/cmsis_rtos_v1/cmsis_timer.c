@@ -48,7 +48,7 @@ osTimerId osTimerCreate(const osTimerDef_t *timer_def, os_timer_type type,
 	}
 
 	if (k_mem_slab_alloc(&cmsis_timer_slab, (void **)&timer, 100) == 0) {
-		memset(timer, 0, sizeof(struct timer_obj));
+		(void)memset(timer, 0, sizeof(struct timer_obj));
 	} else {
 		return NULL;
 	}
@@ -74,7 +74,7 @@ osStatus osTimerStart(osTimerId timer_id, uint32_t millisec)
 		return osErrorParameter;
 	}
 
-	if (_is_in_isr()) {
+	if (k_is_in_isr()) {
 		return osErrorISR;
 	}
 
@@ -99,7 +99,7 @@ osStatus osTimerStop(osTimerId timer_id)
 		return osErrorParameter;
 	}
 
-	if (_is_in_isr()) {
+	if (k_is_in_isr()) {
 		return osErrorISR;
 	}
 
@@ -123,7 +123,7 @@ osStatus osTimerDelete(osTimerId timer_id)
 		return osErrorParameter;
 	}
 
-	if (_is_in_isr()) {
+	if (k_is_in_isr()) {
 		return osErrorISR;
 	}
 

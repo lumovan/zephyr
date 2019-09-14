@@ -4,18 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _POSIX_INTERNAL_H
-#define _POSIX_INTERNAL_H
+#ifndef ZEPHYR_ARCH_POSIX_INCLUDE_POSIX_ARCH_INTERNAL_H_
+#define ZEPHYR_ARCH_POSIX_INCLUDE_POSIX_ARCH_INTERNAL_H_
 
 #include "toolchain.h"
 
-#define _SAFE_CALL(a) _safe_call(a, #a)
+#define PC_SAFE_CALL(a) pc_safe_call(a, #a)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-static inline void _safe_call(int test, const char *test_str)
+static inline void pc_safe_call(int test, const char *test_str)
 {
 	/* LCOV_EXCL_START */ /* See Note1 */
 	if (unlikely(test)) {
@@ -29,11 +29,11 @@ static inline void _safe_call(int test, const char *test_str)
 }
 #endif
 
-#endif /* _POSIX_INTERNAL_H */
+#endif /* ZEPHYR_ARCH_POSIX_INCLUDE_POSIX_ARCH_INTERNAL_H_ */
 
 /*
  * Note 1:
  *
- * All checks for the host pthreads functions which are wrapped by _SAFE_CALL
+ * All checks for the host pthreads functions which are wrapped by PC_SAFE_CALL
  * are meant to never fail, and therefore will not be covered.
  */

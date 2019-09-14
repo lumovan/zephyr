@@ -17,6 +17,10 @@
  * safely by one or more cooperative threads OR by a single preemptive thread,
  * but not by both.
  *
+ * This code is not necessary for systems with CONFIG_EAGER_FP_SHARING, as
+ * the floating point context is unconditionally saved/restored with every
+ * context switch.
+ *
  * The floating point register sharing mechanism is designed for minimal
  * intrusiveness.  Floating point state saving is only performed for threads
  * that explicitly indicate they are using FPU registers, to avoid impacting
@@ -43,10 +47,6 @@
 #include <toolchain.h>
 #include <asm_inline.h>
 
-/* the entire library vanishes without the FP_SHARING option enabled */
-
-#ifdef CONFIG_FP_SHARING
-
 /* SSE control/status register default value (used by assembler code) */
 extern u32_t _sse_mxcsr_default_value;
 
@@ -57,15 +57,15 @@ extern u32_t _sse_mxcsr_default_value;
  * specified thread control block. The SSE registers are saved only if the
  * thread is actually using them.
  */
-static void _FpCtxSave(struct tcs *tcs)
+static void FpCtxSave(struct k_thread *thread)
 {
 #ifdef CONFIG_SSE
-	if (tcs->base.user_options & K_SSE_REGS) {
-		_do_fp_and_sse_regs_save(&tcs->arch.preempFloatReg);
+	if ((thread->base.user_options & K_SSE_REGS) != 0) {
+		z_do_fp_and_sse_regs_save(&thread->arch.preempFloatReg);
 		return;
 	}
 #endif
-	_do_fp_regs_save(&tcs->arch.preempFloatReg);
+	z_do_fp_regs_save(&thread->arch.preempFloatReg);
 }
 
 /*
@@ -74,12 +74,12 @@ static void _FpCtxSave(struct tcs *tcs)
  * This routine initializes the system's "live" floating point context.
  * The SSE registers are initialized only if the thread is actually using them.
  */
-static inline void _FpCtxInit(struct tcs *tcs)
+static inline void FpCtxInit(struct k_thread *thread)
 {
-	_do_fp_regs_init();
+	z_do_fp_regs_init();
 #ifdef CONFIG_SSE
-	if (tcs->base.user_options & K_SSE_REGS) {
-		_do_sse_regs_init();
+	if ((thread->base.user_options & K_SSE_REGS) != 0) {
+		z_do_sse_regs_init();
 	}
 #endif
 }
@@ -88,15 +88,15 @@ static inline void _FpCtxInit(struct tcs *tcs)
  * Enable preservation of floating point context information.
  *
  * The transition from "non-FP supporting" to "FP supporting" must be done
- * atomically to avoid confusing the floating point logic used by _Swap(), so
+ * atomically to avoid confusing the floating point logic used by z_swap(), so
  * this routine locks interrupts to ensure that a context switch does not occur.
  * The locking isn't really needed when the routine is called by a cooperative
  * thread (since context switching can't occur), but it is harmless.
  */
-void k_float_enable(struct tcs *tcs, unsigned int options)
+void k_float_enable(struct k_thread *thread, unsigned int options)
 {
 	unsigned int imask;
-	struct tcs *fp_owner;
+	struct k_thread *fp_owner;
 
 	/* Ensure a preemptive context switch does not occur */
 
@@ -104,7 +104,7 @@ void k_float_enable(struct tcs *tcs, unsigned int options)
 
 	/* Indicate thread requires floating point context saving */
 
-	tcs->base.user_options |= (u8_t)options;
+	thread->base.user_options |= (u8_t)options;
 
 	/*
 	 * The current thread might not allow FP instructions, so clear CR0[TS]
@@ -121,19 +121,19 @@ void k_float_enable(struct tcs *tcs, unsigned int options)
 	 */
 
 	fp_owner = _kernel.current_fp;
-	if (fp_owner) {
-		if (fp_owner->base.thread_state & _INT_OR_EXC_MASK) {
-			_FpCtxSave(fp_owner);
+	if (fp_owner != NULL) {
+		if ((fp_owner->base.thread_state & _INT_OR_EXC_MASK) != 0) {
+			FpCtxSave(fp_owner);
 		}
 	}
 
 	/* Now create a virgin FP context */
 
-	_FpCtxInit(tcs);
+	FpCtxInit(thread);
 
 	/* Associate the new FP context with the specified thread */
 
-	if (tcs == _current) {
+	if (thread == _current) {
 		/*
 		 * When enabling FP support for the current thread, just claim
 		 * ownership of the FPU and leave CR0[TS] unset.
@@ -141,7 +141,7 @@ void k_float_enable(struct tcs *tcs, unsigned int options)
 		 * (The FP context is "live" in hardware, not saved in TCS.)
 		 */
 
-		_kernel.current_fp = tcs;
+		_kernel.current_fp = thread;
 	} else {
 		/*
 		 * When enabling FP support for someone else, assign ownership
@@ -156,8 +156,8 @@ void k_float_enable(struct tcs *tcs, unsigned int options)
 			 * to its original state.
 			 */
 
-			_kernel.current_fp = tcs;
-			_FpAccessDisable();
+			_kernel.current_fp = thread;
+			z_FpAccessDisable();
 		} else {
 			/*
 			 * We are FP-capable (and thus had FPU ownership on
@@ -167,7 +167,7 @@ void k_float_enable(struct tcs *tcs, unsigned int options)
 			 *
 			 * The saved FP context is needed in case the thread
 			 * we enabled FP support for is currently pre-empted,
-			 * since _Swap() uses it to restore FP context when
+			 * since z_swap() uses it to restore FP context when
 			 * the thread re-activates.
 			 *
 			 * Saving the FP context reinits the FPU, and thus
@@ -176,7 +176,7 @@ void k_float_enable(struct tcs *tcs, unsigned int options)
 			 * handling an interrupt or exception.)
 			 */
 
-			_FpCtxSave(tcs);
+			FpCtxSave(thread);
 		}
 	}
 
@@ -187,12 +187,12 @@ void k_float_enable(struct tcs *tcs, unsigned int options)
  * Disable preservation of floating point context information.
  *
  * The transition from "FP supporting" to "non-FP supporting" must be done
- * atomically to avoid confusing the floating point logic used by _Swap(), so
+ * atomically to avoid confusing the floating point logic used by z_swap(), so
  * this routine locks interrupts to ensure that a context switch does not occur.
  * The locking isn't really needed when the routine is called by a cooperative
  * thread (since context switching can't occur), but it is harmless.
  */
-void k_float_disable(struct tcs *tcs)
+void k_float_disable(struct k_thread *thread)
 {
 	unsigned int imask;
 
@@ -202,14 +202,15 @@ void k_float_disable(struct tcs *tcs)
 
 	/* Disable all floating point capabilities for the thread */
 
-	tcs->base.user_options &= ~_FP_USER_MASK;
+	thread->base.user_options &= ~_FP_USER_MASK;
 
-	if (tcs == _current) {
-		_FpAccessDisable();
-		_kernel.current_fp = (struct tcs *)0;
+	if (thread == _current) {
+		z_FpAccessDisable();
+		_kernel.current_fp = (struct k_thread *)0;
 	} else {
-		if (_kernel.current_fp == tcs)
-			_kernel.current_fp = (struct tcs *)0;
+		if (_kernel.current_fp == thread) {
+			_kernel.current_fp = (struct k_thread *)0;
+		}
 	}
 
 	irq_unlock(imask);
@@ -243,5 +244,3 @@ void _FpNotAvailableExcHandler(NANO_ESF *pEsf)
 	k_float_enable(_current, _FP_USER_MASK);
 }
 _EXCEPTION_CONNECT_NOCODE(_FpNotAvailableExcHandler, IV_DEVICE_NOT_AVAILABLE);
-
-#endif /* CONFIG_FP_SHARING */

@@ -10,8 +10,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __ENTROPY_H__
-#define __ENTROPY_H__
+#ifndef ZEPHYR_INCLUDE_ENTROPY_H_
+#define ZEPHYR_INCLUDE_ENTROPY_H_
 
 /**
  * @brief Entropy Interface
@@ -20,12 +20,12 @@
  * @{
  */
 
+#include <zephyr/types.h>
+#include <device.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <zephyr/types.h>
-#include <device.h>
 
 /**
  * @typedef entropy_get_entropy_t
@@ -65,13 +65,15 @@ __syscall int entropy_get_entropy(struct device *dev,
 				  u8_t *buffer,
 				  u16_t length);
 
-static inline int _impl_entropy_get_entropy(struct device *dev,
+static inline int z_impl_entropy_get_entropy(struct device *dev,
 					    u8_t *buffer,
 					    u16_t length)
 {
-	const struct entropy_driver_api *api = dev->driver_api;
+	const struct entropy_driver_api *api =
+		(const struct entropy_driver_api *)dev->driver_api;
 
-	__ASSERT(api->get_entropy, "Callback pointer should not be NULL");
+	__ASSERT(api->get_entropy != NULL,
+		"Callback pointer should not be NULL");
 	return api->get_entropy(dev, buffer, length);
 }
 
@@ -93,11 +95,13 @@ static inline int entropy_get_entropy_isr(struct device *dev,
 					  u16_t length,
 					  u32_t flags)
 {
-	const struct entropy_driver_api *api = dev->driver_api;
+	const struct entropy_driver_api *api =
+		(const struct entropy_driver_api *)dev->driver_api;
 
-	if (!api->get_entropy_isr) {
+	if (unlikely(!api->get_entropy_isr)) {
 		return -ENOTSUP;
 	}
+
 	return api->get_entropy_isr(dev, buffer, length, flags);
 }
 
@@ -112,4 +116,4 @@ static inline int entropy_get_entropy_isr(struct device *dev,
 
 #include <syscalls/entropy.h>
 
-#endif /* __ENTROPY_H__ */
+#endif /* ZEPHYR_INCLUDE_ENTROPY_H_ */

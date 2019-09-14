@@ -13,7 +13,7 @@ void fcb_test_init(void)
 	struct fcb *fcb;
 
 	fcb = &test_fcb;
-	memset(fcb, 0, sizeof(*fcb));
+	(void)memset(fcb, 0, sizeof(*fcb));
 
 	rc = fcb_init(TEST_FCB_FLASH_AREA_ID, fcb);
 	zassert_true(rc == FCB_ERR_ARGS, "fcb_init call should fail");
@@ -23,12 +23,12 @@ void fcb_test_init(void)
 	rc = fcb_init(TEST_FCB_FLASH_AREA_ID, fcb);
 	zassert_true(rc == FCB_ERR_ARGS, "fcb_init call should fail");
 
-	fcb->f_sector_cnt = 2;
+	fcb->f_sector_cnt = 2U;
 	fcb->f_magic = 0x12345678;
 	rc = fcb_init(TEST_FCB_FLASH_AREA_ID, fcb);
 	zassert_true(rc == FCB_ERR_MAGIC, "fcb_init call should fail");
 
-	fcb->f_magic = 0;
+	fcb->f_magic = 0U;
 	rc = fcb_init(TEST_FCB_FLASH_AREA_ID, fcb);
 	zassert_true(rc == 0,  "fcb_init call failure");
 }

@@ -11,7 +11,6 @@
 
 #include <zephyr.h>
 
-#include <board.h>
 #include <init.h>
 #include <uart.h>
 #include <misc/util.h>
@@ -25,12 +24,13 @@
 #include <bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
+#define LOG_MODULE_NAME bt_driver
 #include "common/log.h"
 
 #include "../util.h"
 
-static BT_STACK_NOINIT(tx_stack, 256);
-static BT_STACK_NOINIT(rx_stack, 256);
+static K_THREAD_STACK_DEFINE(tx_stack, 256);
+static K_THREAD_STACK_DEFINE(rx_stack, 256);
 
 static struct k_thread tx_thread_data;
 static struct k_thread rx_thread_data;
@@ -286,7 +286,7 @@ static void h5_send(const u8_t *payload, u8_t type, int len)
 
 	hexdump("<= ", payload, len);
 
-	memset(hdr, 0, sizeof(hdr));
+	(void)memset(hdr, 0, sizeof(hdr));
 
 	/* Set ACK for outgoing packet and stop delayed work */
 	H5_SET_ACK(hdr, h5.tx_ack);
@@ -408,16 +408,7 @@ static inline struct net_buf *get_evt_buf(u8_t evt)
 {
 	struct net_buf *buf;
 
-	switch (evt) {
-	case BT_HCI_EVT_CMD_COMPLETE:
-	case BT_HCI_EVT_CMD_STATUS:
-		buf = bt_buf_get_cmd_complete(K_NO_WAIT);
-		break;
-	default:
-		buf = bt_buf_get_rx(BT_BUF_EVT, K_NO_WAIT);
-		break;
-	}
-
+	buf = bt_buf_get_evt(evt, false, K_NO_WAIT);
 	if (buf) {
 		net_buf_add_u8(h5.rx_buf, evt);
 	}
@@ -711,7 +702,7 @@ static void h5_init(void)
 
 	h5.link_state = UNINIT;
 	h5.rx_state = START;
-	h5.tx_win = 4;
+	h5.tx_win = 4U;
 
 	/* TX thread */
 	k_fifo_init(&h5.tx_queue);
@@ -761,7 +752,7 @@ static const struct bt_hci_driver drv = {
 	.send		= h5_queue,
 };
 
-static int _bt_uart_init(struct device *unused)
+static int bt_uart_init(struct device *unused)
 {
 	ARG_UNUSED(unused);
 
@@ -776,4 +767,4 @@ static int _bt_uart_init(struct device *unused)
 	return 0;
 }
 
-SYS_INIT(_bt_uart_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+SYS_INIT(bt_uart_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

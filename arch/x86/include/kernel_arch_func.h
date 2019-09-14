@@ -7,8 +7,8 @@
 
 /* this file is only meant to be included by kernel_structs.h */
 
-#ifndef _kernel_arch_func__h_
-#define _kernel_arch_func__h_
+#ifndef ZEPHYR_ARCH_X86_INCLUDE_KERNEL_ARCH_FUNC_H_
+#define ZEPHYR_ARCH_X86_INCLUDE_KERNEL_ARCH_FUNC_H_
 
 #ifndef _ASMLANGUAGE
 
@@ -36,10 +36,10 @@ extern K_THREAD_STACK_DEFINE(_interrupt_stack, CONFIG_ISR_STACK_SIZE);
 static inline void kernel_arch_init(void)
 {
 	_kernel.nested = 0;
-	_kernel.irq_stack = K_THREAD_STACK_BUFFER(_interrupt_stack) +
+	_kernel.irq_stack = Z_THREAD_STACK_BUFFER(_interrupt_stack) +
 				CONFIG_ISR_STACK_SIZE;
 #if CONFIG_X86_STACK_PROTECTION
-	_x86_mmu_set_flags(_interrupt_stack, MMU_PAGE_SIZE,
+	z_x86_mmu_set_flags(&z_x86_kernel_pdpt, _interrupt_stack, MMU_PAGE_SIZE,
 			   MMU_ENTRY_NOT_PRESENT, MMU_PTE_P_MASK);
 #endif
 }
@@ -58,14 +58,14 @@ static inline void kernel_arch_init(void)
  * @return N/A
  */
 static ALWAYS_INLINE void
-_set_thread_return_value(struct k_thread *thread, unsigned int value)
+z_set_thread_return_value(struct k_thread *thread, unsigned int value)
 {
-	/* write into 'eax' slot created in _Swap() entry */
+	/* write into 'eax' slot created in z_swap() entry */
 
 	*(unsigned int *)(thread->callee_saved.esp) = value;
 }
 
-extern void k_cpu_atomic_idle(unsigned int imask);
+extern void k_cpu_atomic_idle(unsigned int key);
 
 /**
  * @brief Write to a model specific register (MSR)
@@ -77,7 +77,7 @@ extern void k_cpu_atomic_idle(unsigned int imask);
  *
  * @return N/A
  */
-static inline void _x86_msr_write(unsigned int msr, u64_t data)
+static inline void z_x86_msr_write(unsigned int msr, u64_t data)
 {
 	u32_t high = data >> 32;
 	u32_t low = data & 0xFFFFFFFF;
@@ -95,7 +95,7 @@ static inline void _x86_msr_write(unsigned int msr, u64_t data)
  *
  * @return N/A
  */
-static inline u64_t _x86_msr_read(unsigned int msr)
+static inline u64_t z_x86_msr_read(unsigned int msr)
 {
 	u64_t ret;
 
@@ -109,29 +109,16 @@ static inline u64_t _x86_msr_read(unsigned int msr)
 
 static inline u32_t read_x2apic(unsigned int reg)
 {
-	return _x86_msr_read(MSR_X2APIC_BASE + reg);
+	return z_x86_msr_read(MSR_X2APIC_BASE + reg);
 }
 
 static inline void write_x2apic(unsigned int reg, u32_t val)
 {
-	_x86_msr_write(MSR_X2APIC_BASE + reg, val);
+	z_x86_msr_write(MSR_X2APIC_BASE + reg, val);
 }
 #endif
 
-/*
- * _IntLibInit() is called from the non-arch specific function,
- * prepare_multithreading(). The IA-32 kernel does not require any special
- * initialization of the interrupt subsystem. However, we still need to
- * provide an _IntLibInit() of some sort to prevent build errors.
- */
-static inline void _IntLibInit(void)
-{
-}
-
-/* the _idt_base_address symbol is generated via a linker script */
-extern unsigned char _idt_base_address[];
-
-extern FUNC_NORETURN void _x86_userspace_enter(k_thread_entry_t user_entry,
+extern FUNC_NORETURN void z_x86_userspace_enter(k_thread_entry_t user_entry,
 					       void *p1, void *p2, void *p3,
 					       u32_t stack_end,
 					       u32_t stack_start);
@@ -142,8 +129,8 @@ extern FUNC_NORETURN void _x86_userspace_enter(k_thread_entry_t user_entry,
 }
 #endif
 
-#define _is_in_isr() (_kernel.nested != 0)
+#define z_is_in_isr() (_kernel.nested != 0U)
 
 #endif /* _ASMLANGUAGE */
 
-#endif /* _kernel_arch_func__h_ */
+#endif /* ZEPHYR_ARCH_X86_INCLUDE_KERNEL_ARCH_FUNC_H_ */

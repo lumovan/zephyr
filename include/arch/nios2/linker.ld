@@ -82,6 +82,23 @@ ENTRY(CONFIG_KERNEL_ENTRY)
 
 SECTIONS
     {
+
+#include <linker/rel-sections.ld>
+
+    /*
+     * .plt and .iplt are here according to
+     * 'nios2-zephyr-elf-ld --verbose', before text section.
+     */
+    SECTION_PROLOGUE(.plt,,)
+        {
+        *(.plt)
+        }
+
+    SECTION_PROLOGUE(.iplt,,)
+        {
+        *(.iplt)
+        }
+
     GROUP_START(ROMABLE_REGION)
     _image_rom_start = _ROM_ADDR;
 
@@ -124,15 +141,22 @@ SECTIONS
 
     SECTION_PROLOGUE(_RODATA_SECTION_NAME,,)
         {
+        . = ALIGN(4);
+
         *(.rodata)
         *(".rodata.*")
         *(.gnu.linkonce.r.*)
+
+#ifdef CONFIG_SOC_RODATA_LD
+#include <soc-rodata.ld>
+#endif
 
 #ifdef CONFIG_CUSTOM_RODATA_LD
 /* Located in project source directory */
 #include <custom-rodata.ld>
 #endif
 
+        . = ALIGN(4);
         } GROUP_LINK_IN(ROMABLE_REGION)
 
     _image_rom_end = .;
@@ -168,11 +192,12 @@ SECTIONS
 
     SECTION_DATA_PROLOGUE(_DATA_SECTION_NAME,,)
         {
-#ifdef CONFIG_GEN_SW_ISR_TABLE
-	KEEP(*(SW_ISR_TABLE))
-#endif
         *(.data)
         *(".data.*")
+
+#ifdef CONFIG_SOC_RWDATA_LD
+#include <soc-rwdata.ld>
+#endif
 
 #ifdef CONFIG_CUSTOM_RWDATA_LD
 /* Located in project source directory */
@@ -231,6 +256,11 @@ SECTIONS
          */
         *(.noinit)
         *(".noinit.*")
+
+#ifdef CONFIG_SOC_NOINIT_LD
+#include <soc-noinit.ld>
+#endif
+
         } GROUP_LINK_IN(RAMABLE_REGION)
 
     /* Define linker symbols */
@@ -247,6 +277,8 @@ SECTIONS
 #ifdef CONFIG_GEN_ISR_TABLES
 #include <linker/intlist.ld>
 #endif
+
+#include <linker/debug-sections.ld>
 
     }
 

@@ -1,7 +1,8 @@
 sample:
   name: Blinky Sample
 tests:
-  test:
-    platform_whitelist: arduino_101
-    tags: samples
+  sample.blinky:
+    tags: LED gpio
+    filter: DT_GPIO_LEDS_LED0_GPIO_CONTROLLER
     depends_on: gpio
+    harness: led

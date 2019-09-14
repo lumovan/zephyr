@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-#define SYS_LOG_DOMAIN "net/bt"
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_bt, CONFIG_NET_L2_BT_LOG_LEVEL);
 
 #include <kernel.h>
 #include <toolchain.h>
@@ -15,7 +13,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include <board.h>
 #include <device.h>
 #include <init.h>
 
@@ -46,6 +43,12 @@
 static struct bt_conn *default_conn;
 #endif
 
+#if defined(CONFIG_NET_L2_BT_SHELL)
+extern int net_bt_shell_init(void);
+#else
+#define net_bt_shell_init(...)
+#endif
+
 struct bt_context {
 	struct net_if *iface;
 	struct bt_l2cap_le_chan ipsp_chan;
@@ -65,33 +68,40 @@ static enum net_verdict net_bt_recv(struct net_if *iface, struct net_pkt *pkt)
 	return NET_CONTINUE;
 }
 
-static enum net_verdict net_bt_send(struct net_if *iface, struct net_pkt *pkt)
+static int net_bt_send(struct net_if *iface, struct net_pkt *pkt)
 {
 	struct bt_context *ctxt = net_if_get_device(iface)->driver_data;
+	struct net_buf *buffer;
+	int length;
+	int ret;
 
 	NET_DBG("iface %p pkt %p len %zu", iface, pkt, net_pkt_get_len(pkt));
 
 	/* Only accept IPv6 packets */
 	if (net_pkt_family(pkt) != AF_INET6) {
-		return NET_DROP;
+		return -EINVAL;
 	}
 
-	if (!net_6lo_compress(pkt, true, NULL)) {
+	ret = net_6lo_compress(pkt, true);
+	if (ret < 0) {
 		NET_DBG("Packet compression failed");
-		return NET_DROP;
+		return ret;
 	}
 
-	net_if_queue_tx(ctxt->iface, pkt);
+	length = net_pkt_get_len(pkt);
 
-	return NET_OK;
-}
+	/* Dettach data fragments for packet */
+	buffer = pkt->buffer;
+	pkt->buffer = NULL;
 
-static inline u16_t net_bt_reserve(struct net_if *iface, void *unused)
-{
-	ARG_UNUSED(iface);
-	ARG_UNUSED(unused);
+	ret = bt_l2cap_chan_send(&ctxt->ipsp_chan.chan, buffer);
+	if (ret < 0) {
+		return ret;
+	}
 
-	return 0;
+	net_pkt_unref(pkt);
+
+	return length;
 }
 
 static int net_bt_enable(struct net_if *iface, bool state)
@@ -112,7 +122,7 @@ static enum net_l2_flags net_bt_flags(struct net_if *iface)
 	return NET_L2_MULTICAST | NET_L2_MULTICAST_SKIP_JOIN_SOLICIT_NODE;
 }
 
-NET_L2_INIT(BLUETOOTH_L2, net_bt_recv, net_bt_send, net_bt_reserve,
+NET_L2_INIT(BLUETOOTH_L2, net_bt_recv, net_bt_send,
 	    net_bt_enable, net_bt_flags);
 
 static void ipsp_connected(struct bt_l2cap_chan *chan)
@@ -122,24 +132,22 @@ static void ipsp_connected(struct bt_l2cap_chan *chan)
 	struct net_linkaddr ll;
 	struct in6_addr in6;
 
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-	char src[BT_ADDR_LE_STR_LEN];
-	char dst[BT_ADDR_LE_STR_LEN];
-#endif
-
 	if (bt_conn_get_info(chan->conn, &info) < 0) {
 		NET_ERR("Unable to get connection info");
 		bt_l2cap_chan_disconnect(chan);
 		return;
 	}
 
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-	bt_addr_le_to_str(info.le.src, src, sizeof(src));
-	bt_addr_le_to_str(info.le.dst, dst, sizeof(dst));
+	if (CONFIG_NET_L2_BT_LOG_LEVEL >= LOG_LEVEL_DBG) {
+		char src[BT_ADDR_LE_STR_LEN];
+		char dst[BT_ADDR_LE_STR_LEN];
 
-	NET_DBG("Channel %p Source %s connected to Destination %s", chan,
-		src, dst);
-#endif
+		bt_addr_le_to_str(info.le.src, src, sizeof(src));
+		bt_addr_le_to_str(info.le.dst, dst, sizeof(dst));
+
+		NET_DBG("Channel %p Source %s connected to Destination %s",
+			chan, log_strdup(src), log_strdup(dst));
+	}
 
 	/* Swap bytes since net APIs expect big endian address */
 	sys_memcpy_swap(ctxt->src.val, info.le.src->a.val, sizeof(ctxt->src));
@@ -183,7 +191,7 @@ static void ipsp_disconnected(struct bt_l2cap_chan *chan)
 #endif
 }
 
-static void ipsp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
+static int ipsp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	struct bt_context *ctxt = CHAN_CTXT(chan);
 	struct net_pkt *pkt;
@@ -192,37 +200,39 @@ static void ipsp_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		net_buf_frags_len(buf));
 
 	/* Get packet for bearer / protocol related data */
-	pkt = net_pkt_get_reserve_rx(0, BUF_TIMEOUT);
+	pkt = net_pkt_rx_alloc_on_iface(ctxt->iface, BUF_TIMEOUT);
 	if (!pkt) {
-		return;
+		return -ENOMEM;
 	}
 
 	/* Set destination address */
-	net_pkt_ll_dst(pkt)->addr = ctxt->src.val;
-	net_pkt_ll_dst(pkt)->len = sizeof(ctxt->src);
-	net_pkt_ll_dst(pkt)->type = NET_LINK_BLUETOOTH;
+	net_pkt_lladdr_dst(pkt)->addr = ctxt->src.val;
+	net_pkt_lladdr_dst(pkt)->len = sizeof(ctxt->src);
+	net_pkt_lladdr_dst(pkt)->type = NET_LINK_BLUETOOTH;
 
 	/* Set source address */
-	net_pkt_ll_src(pkt)->addr = ctxt->dst.val;
-	net_pkt_ll_src(pkt)->len = sizeof(ctxt->dst);
-	net_pkt_ll_src(pkt)->type = NET_LINK_BLUETOOTH;
+	net_pkt_lladdr_src(pkt)->addr = ctxt->dst.val;
+	net_pkt_lladdr_src(pkt)->len = sizeof(ctxt->dst);
+	net_pkt_lladdr_src(pkt)->type = NET_LINK_BLUETOOTH;
 
 	/* Add data buffer as fragment of RX buffer, take a reference while
 	 * doing so since L2CAP will unref the buffer after return.
 	 */
-	net_pkt_frag_add(pkt, net_buf_ref(buf));
+	net_pkt_append_buffer(pkt, net_buf_ref(buf));
 
 	if (net_recv_data(ctxt->iface, pkt) < 0) {
 		NET_DBG("Packet dropped by NET stack");
 		net_pkt_unref(pkt);
 	}
+
+	return 0;
 }
 
 static struct net_buf *ipsp_alloc_buf(struct bt_l2cap_chan *chan)
 {
 	NET_DBG("Channel %p requires buffer", chan);
 
-	return net_pkt_get_reserve_rx_data(0, K_FOREVER);
+	return net_pkt_get_reserve_rx_data(K_FOREVER);
 }
 
 static struct bt_l2cap_chan_ops ipsp_ops = {
@@ -237,28 +247,6 @@ static struct bt_context bt_context_data = {
 	.ipsp_chan.chan.ops	= &ipsp_ops,
 	.ipsp_chan.rx.mtu	= L2CAP_IPSP_MTU,
 };
-
-static int bt_iface_send(struct net_if *iface, struct net_pkt *pkt)
-{
-	struct bt_context *ctxt = net_if_get_device(iface)->driver_data;
-	struct net_buf *frags;
-	int ret;
-
-	NET_DBG("iface %p pkt %p len %zu", iface, pkt, net_pkt_get_len(pkt));
-
-	/* Dettach data fragments for packet */
-	frags = pkt->frags;
-	pkt->frags = NULL;
-
-	net_pkt_unref(pkt);
-
-	ret = bt_l2cap_chan_send(&ctxt->ipsp_chan.chan, frags);
-	if (ret < 0) {
-		return ret;
-	}
-
-	return ret;
-}
 
 static void bt_iface_init(struct net_if *iface)
 {
@@ -278,7 +266,6 @@ static void bt_iface_init(struct net_if *iface)
 
 static struct net_if_api bt_if_api = {
 	.init = bt_iface_init,
-	.send = bt_iface_send,
 };
 
 static int ipsp_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
@@ -362,15 +349,12 @@ static bool eir_found(u8_t type, const u8_t *data, u8_t data_len,
 		      void *user_data)
 {
 	int i;
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-	bt_addr_le_t *addr = user_data;
-	char dev[BT_ADDR_LE_STR_LEN];
-#endif
+
 	if (type != BT_DATA_UUID16_SOME && type != BT_DATA_UUID16_ALL) {
 		return false;
 	}
 
-	if (data_len % sizeof(u16_t) != 0) {
+	if (data_len % sizeof(u16_t) != 0U) {
 		NET_ERR("AD malformed\n");
 		return false;
 	}
@@ -385,10 +369,13 @@ static bool eir_found(u8_t type, const u8_t *data, u8_t data_len,
 			continue;
 		}
 
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-		bt_addr_le_to_str(addr, dev, sizeof(dev));
-		NET_DBG("[DEVICE]: %s", dev);
-#endif
+		if (CONFIG_NET_L2_BT_LOG_LEVEL >= LOG_LEVEL_DBG) {
+			bt_addr_le_t *addr = user_data;
+			char dev[BT_ADDR_LE_STR_LEN];
+
+			bt_addr_le_to_str(addr, dev, sizeof(dev));
+			NET_DBG("[DEVICE]: %s", log_strdup(dev));
+		}
 
 		/* TODO: Notify device address found */
 		net_mgmt_event_notify(NET_EVENT_BT_SCAN_RESULT,
@@ -410,7 +397,7 @@ static bool ad_parse(struct net_buf_simple *ad,
 		u8_t type;
 
 		/* Check for early termination */
-		if (len == 0) {
+		if (len == 0U) {
 			return false;
 		}
 
@@ -508,13 +495,16 @@ static int bt_disconnect(u32_t mgmt_request, struct net_if *iface,
 static void connected(struct bt_conn *conn, u8_t err)
 {
 	if (err) {
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-		char addr[BT_ADDR_LE_STR_LEN];
+		if (CONFIG_NET_L2_BT_LOG_LEVEL >= LOG_LEVEL_DBG) {
+			char addr[BT_ADDR_LE_STR_LEN];
 
-		bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+			bt_addr_le_to_str(bt_conn_get_dst(conn), addr,
+					  sizeof(addr));
 
-		NET_ERR("Failed to connect to %s (%u)\n", addr, err);
-#endif
+			NET_ERR("Failed to connect to %s (%u)\n",
+				log_strdup(addr), err);
+		}
+
 		return;
 	}
 
@@ -528,19 +518,18 @@ static void connected(struct bt_conn *conn, u8_t err)
 
 static void disconnected(struct bt_conn *conn, u8_t reason)
 {
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-	char addr[BT_ADDR_LE_STR_LEN];
-#endif
-
 	if (conn != default_conn) {
 		return;
 	}
 
-#if defined(CONFIG_NET_DEBUG_L2_BT)
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	if (CONFIG_NET_L2_BT_LOG_LEVEL >= LOG_LEVEL_DBG) {
+		char addr[BT_ADDR_LE_STR_LEN];
 
-	NET_DBG("Disconnected: %s (reason %u)\n", addr, reason);
-#endif
+		bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+		NET_DBG("Disconnected: %s (reason %u)\n",
+			log_strdup(addr), reason);
+	}
 
 	bt_conn_unref(default_conn);
 	default_conn = NULL;
@@ -560,6 +549,8 @@ static int net_bt_init(struct device *dev)
 	bt_conn_cb_register(&conn_callbacks);
 #endif
 	bt_l2cap_server_register(&server);
+
+	net_bt_shell_init();
 
 	return 0;
 }

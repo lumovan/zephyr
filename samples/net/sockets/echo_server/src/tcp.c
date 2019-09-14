@@ -7,11 +7,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if 1
-#define SYS_LOG_DOMAIN "echo-server"
-#define NET_SYS_LOG_LEVEL SYS_LOG_LEVEL_DEBUG
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_DECLARE(net_echo_server_sample, LOG_LEVEL_DBG);
 
 #include <zephyr.h>
 #include <errno.h>
@@ -63,7 +60,7 @@ static int start_tcp_proto(struct data *data, struct sockaddr *bind_addr,
 	data->tcp.sock = socket(bind_addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
 #endif
 	if (data->tcp.sock < 0) {
-		NET_ERR("Failed to create TCP socket (%s): %d", data->proto,
+		LOG_ERR("Failed to create TCP socket (%s): %d", data->proto,
 			errno);
 		return -errno;
 	}
@@ -76,7 +73,7 @@ static int start_tcp_proto(struct data *data, struct sockaddr *bind_addr,
 	ret = setsockopt(data->tcp.sock, SOL_TLS, TLS_SEC_TAG_LIST,
 			 sec_tag_list, sizeof(sec_tag_list));
 	if (ret < 0) {
-		NET_ERR("Failed to set TCP secure option (%s): %d", data->proto,
+		LOG_ERR("Failed to set TCP secure option (%s): %d", data->proto,
 			errno);
 		ret = -errno;
 	}
@@ -84,14 +81,14 @@ static int start_tcp_proto(struct data *data, struct sockaddr *bind_addr,
 
 	ret = bind(data->tcp.sock, bind_addr, bind_addrlen);
 	if (ret < 0) {
-		NET_ERR("Failed to bind TCP socket (%s): %d", data->proto,
+		LOG_ERR("Failed to bind TCP socket (%s): %d", data->proto,
 			errno);
 		return -errno;
 	}
 
 	ret = listen(data->tcp.sock, MAX_CLIENT_QUEUE);
 	if (ret < 0) {
-		NET_ERR("Failed to listen on TCP socket (%s): %d", data->proto,
+		LOG_ERR("Failed to listen on TCP socket (%s): %d", data->proto,
 			errno);
 		ret = -errno;
 	}
@@ -108,17 +105,18 @@ static int process_tcp(struct data *data)
 	struct sockaddr_in client_addr;
 	socklen_t client_addr_len = sizeof(client_addr);
 
-	NET_INFO("Waiting for TCP connection (%s)...", data->proto);
+	LOG_INF("Waiting for TCP connection on port %d (%s)...",
+		MY_PORT, data->proto);
 
 	client = accept(data->tcp.sock, (struct sockaddr *)&client_addr,
 			&client_addr_len);
 	if (client < 0) {
-		NET_ERR("Error in accept (%s): %d - stopping server",
+		LOG_ERR("Error in accept (%s): %d - stopping server",
 			data->proto, errno);
 		return -errno;
 	}
 
-	NET_INFO("TCP (%s): Accepted connection", data->proto);
+	LOG_INF("TCP (%s): Accepted connection", data->proto);
 
 	do {
 		received = recv(client, data->tcp.recv_buffer + offset,
@@ -126,12 +124,12 @@ static int process_tcp(struct data *data)
 
 		if (received == 0) {
 			/* Connection closed */
-			NET_INFO("TCP (%s): Connection closed", data->proto);
+			LOG_INF("TCP (%s): Connection closed", data->proto);
 			ret = 0;
 			break;
 		} else if (received < 0) {
 			/* Socket error */
-			NET_ERR("TCP (%s): Connection error %d", data->proto,
+			LOG_ERR("TCP (%s): Connection error %d", data->proto,
 				errno);
 			ret = -errno;
 			break;
@@ -151,18 +149,18 @@ static int process_tcp(struct data *data)
 #endif
 			ret = sendall(client, data->tcp.recv_buffer, offset);
 			if (ret < 0) {
-				NET_ERR("TCP (%s): Failed to send, "
+				LOG_ERR("TCP (%s): Failed to send, "
 					"closing socket", data->proto);
 				ret = 0;
 				break;
 			}
 
-			NET_DBG("TCP (%s): Received and replied with %d bytes",
+			LOG_DBG("TCP (%s): Received and replied with %d bytes",
 				data->proto, offset);
 
-			if (++data->tcp.counter % 1000 == 0) {
-				NET_INFO("%s TCP: Sent %u packets", data->proto,
-					 data->tcp.counter);
+			if (++data->tcp.counter % 1000 == 0U) {
+				LOG_INF("%s TCP: Sent %u packets", data->proto,
+					data->tcp.counter);
 			}
 
 			offset = 0;
@@ -181,7 +179,7 @@ static void process_tcp4(void)
 	int ret;
 	struct sockaddr_in addr4;
 
-	memset(&addr4, 0, sizeof(addr4));
+	(void)memset(&addr4, 0, sizeof(addr4));
 	addr4.sin_family = AF_INET;
 	addr4.sin_port = htons(MY_PORT);
 
@@ -205,7 +203,7 @@ static void process_tcp6(void)
 	int ret;
 	struct sockaddr_in6 addr6;
 
-	memset(&addr6, 0, sizeof(addr6));
+	(void)memset(&addr6, 0, sizeof(addr6));
 	addr6.sin6_family = AF_INET6;
 	addr6.sin6_port = htons(MY_PORT);
 

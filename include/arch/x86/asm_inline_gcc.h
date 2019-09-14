@@ -8,8 +8,8 @@
 
 /* Either public functions or macros or invoked by public functions */
 
-#ifndef _ASM_INLINE_GCC_PUBLIC_GCC_H
-#define _ASM_INLINE_GCC_PUBLIC_GCC_H
+#ifndef ZEPHYR_INCLUDE_ARCH_X86_ASM_INLINE_GCC_H_
+#define ZEPHYR_INCLUDE_ARCH_X86_ASM_INLINE_GCC_H_
 
 /*
  * The file must not be included directly
@@ -68,7 +68,7 @@ static ALWAYS_INLINE unsigned int _do_irq_lock(void)
  * @return N/A
  */
 
-static ALWAYS_INLINE void _do_irq_unlock(void)
+static ALWAYS_INLINE void z_do_irq_unlock(void)
 {
 	__asm__ volatile (
 		"sti;\n\t"
@@ -180,7 +180,7 @@ static ALWAYS_INLINE unsigned int find_msb_set(u32_t op)
  *  @brief read timestamp register ensuring serialization
  */
 
-static inline u64_t _tsc_read(void)
+static inline u64_t z_tsc_read(void)
 {
 	union {
 		struct  {
@@ -217,7 +217,7 @@ static inline u64_t _tsc_read(void)
  */
 
 static ALWAYS_INLINE
-	u32_t _do_read_cpu_timestamp32(void)
+	u32_t z_do_read_cpu_timestamp32(void)
 {
 	u32_t rv;
 
@@ -326,7 +326,7 @@ static ALWAYS_INLINE
 			 : "=a" (ret)
 			 : "Nd" (port), "Ir" (bit));
 
-	return (ret & 1);
+	return (ret & 1U);
 }
 
 static ALWAYS_INLINE
@@ -486,4 +486,4 @@ static ALWAYS_INLINE
 }
 #endif
 
-#endif /* _ASM_INLINE_GCC_PUBLIC_GCC_H */
+#endif /* ZEPHYR_INCLUDE_ARCH_X86_ASM_INLINE_GCC_H_ */

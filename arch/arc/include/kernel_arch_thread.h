@@ -17,8 +17,8 @@
  * necessary to instantiate instances of struct k_thread.
  */
 
-#ifndef _kernel_arch_thread__h_
-#define _kernel_arch_thread__h_
+#ifndef ZEPHYR_ARCH_ARC_INCLUDE_KERNEL_ARCH_THREAD_H_
+#define ZEPHYR_ARCH_ARC_INCLUDE_KERNEL_ARCH_THREAD_H_
 
 /*
  * Reason a thread has relinquished control: threads can only be in the NONE
@@ -54,7 +54,7 @@ struct _thread_arch {
 	/* one of the _CAUSE_xxxx definitions above */
 	int relinquish_cause;
 
-	/* return value from _Swap */
+	/* return value from z_swap */
 	unsigned int return_value;
 
 #ifdef CONFIG_ARC_STACK_CHECKING
@@ -71,7 +71,6 @@ struct _thread_arch {
 
 #ifdef CONFIG_USERSPACE
 	u32_t priv_stack_start;
-	u32_t priv_stack_size;
 #endif
 };
 
@@ -79,4 +78,4 @@ typedef struct _thread_arch _thread_arch_t;
 
 #endif /* _ASMLANGUAGE */
 
-#endif /* _kernel_arch_thread__h_ */
+#endif /* ZEPHYR_ARCH_ARC_INCLUDE_KERNEL_ARCH_THREAD_H_ */

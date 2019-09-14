@@ -5,10 +5,13 @@ arch: arm
 toolchain:
   - zephyr
   - gnuarmemb
+  - xtools
 supported:
   - gpio
   - ble
   - i2c
+  - rtc
+  - counter
   - spi
   - usb_device
 ram: 96

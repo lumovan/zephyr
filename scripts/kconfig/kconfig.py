@@ -5,7 +5,8 @@ import os
 import sys
 import textwrap
 
-from kconfiglib import Kconfig, Symbol, BOOL, STRING, TRISTATE, TRI_TO_STR
+from kconfiglib import Kconfig, BOOL, TRISTATE, TRI_TO_STR
+
 
 # Warnings that won't be turned into errors (but that will still be printed),
 # identified by a substring of the warning. The warning texts from Kconfiglib
@@ -16,34 +17,25 @@ WARNING_WHITELIST = (
     "y-selected",
 )
 
+
 def fatal(warning):
     # Returns True if 'warning' is not whitelisted and should be turned into an
     # error
 
-    for wl_warning in WARNING_WHITELIST:
-        if wl_warning in warning:
-            return False
-
-    # Only allow enabled (printed) warnings to be fatal
-    return enabled(warning)
-
-
-def enabled(warning):
-    # Returns True if 'warning' should be printed
-
-    # Some prj.conf files seem to deliberately override settings from the board
-    # configuration (e.g. samples/bluetooth/hci_usb/prj.conf, with GPIO=y).
-    # Disable the warning about a symbol being assigned more than once.
-    return "set more than once" not in warning
+    return not any(wl_warning in warning for wl_warning in WARNING_WHITELIST)
 
 
 def main():
-    parse_args()
+    args = parse_args()
 
-    print("Parsing Kconfig tree in {}".format(args.kconfig_root))
+    print("Parsing Kconfig tree in " + args.kconfig_root)
     kconf = Kconfig(args.kconfig_root, warn_to_stderr=False)
 
-    # Enable warnings for assignments to undefined symbols
+    # prj.conf may override settings from the board configuration, so disable
+    # warnings about symbols being assigned more than once
+    kconf.disable_override_warnings()
+    kconf.disable_redun_warnings()
+    # Warn for assignments to undefined symbols
     kconf.enable_undef_warnings()
 
     for i, config in enumerate(args.conf_fragments):
@@ -73,11 +65,11 @@ def main():
     # fast.
     kconf.write_config(os.devnull)
 
-    # We could roll this into the loop below, but it's nice to always print all
-    # warnings, even if one of them turns out to be fatal
+    # Print warnings ourselves so that we can put a blank line between them for
+    # readability. We could roll this into the loop below, but it's nice to
+    # always print all warnings, even if one of them turns out to be fatal.
     for warning in kconf.warnings:
-        if enabled(warning):
-            print("\n" + warning, file=sys.stderr)
+        print("\n" + warning, file=sys.stderr)
 
     # Turn all warnings except for explicity whitelisted ones into errors. In
     # particular, this will turn assignments to undefined Kconfig variables
@@ -98,7 +90,11 @@ def main():
 
     # Write the merged configuration and the C header
     kconf.write_config(args.dotconfig)
+    print("Configuration written to '{}'".format(args.dotconfig))
     kconf.write_autoconf(args.autoconf)
+
+    # Write the list of processed Kconfig sources to a file
+    write_kconfig_filenames(kconf.kconfig_filenames, kconf.srctree, args.sources)
 
 
 # Message printed when a promptless symbol is assigned (and doesn't get the
@@ -115,7 +111,7 @@ SYM_INFO_HINT = """
 You can check symbol information (including dependencies) in the 'menuconfig'
 interface (see the Application Development Primer section of the manual), or in
 the Kconfig reference at
-http://docs.zephyrproject.org/reference/kconfig/CONFIG_{}.html (which is
+http://docs.zephyrproject.org/latest/reference/kconfig/CONFIG_{}.html (which is
 updated regularly from the master branch). See the 'Setting configuration
 values' section of the Board Porting Guide as well."""
 
@@ -189,10 +185,34 @@ def promptless(sym):
 
     return not any(node.prompt for node in sym.nodes)
 
+def write_kconfig_filenames(paths, root_path, output_file_path):
+    # 'paths' is a list of paths. The list has duplicates and the
+    # paths are either absolute or relative to 'root_path'.
+
+    # We need to write this list, in a format that CMake can easily
+    # parse, to the output file at 'output_file_path'.
+
+    # The written list should also have absolute paths instead of
+    # relative paths, and it should not have duplicates.
+
+    # Remove duplicates
+    paths_uniq = set(paths)
+
+    with open(output_file_path, 'w') as out:
+        # sort to be deterministic
+        for path in sorted(paths_uniq):
+            # Change from relative to absolute path (do nothing for
+            # absolute paths)
+            abs_path = os.path.join(root_path, path)
+
+            # Assert that the file exists, since it was sourced, it
+            # must surely also exist.
+            assert os.path.isfile(abs_path), "Internal error"
+
+            out.write("{}\n".format(abs_path))
+
 
 def parse_args():
-    global args
-
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter
@@ -201,9 +221,10 @@ def parse_args():
     parser.add_argument("kconfig_root")
     parser.add_argument("dotconfig")
     parser.add_argument("autoconf")
+    parser.add_argument("sources")
     parser.add_argument("conf_fragments", metavar='conf', type=str, nargs='+')
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

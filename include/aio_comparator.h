@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _AIO_COMPARATOR_H_
-#define _AIO_COMPARATOR_H_
+#ifndef ZEPHYR_INCLUDE_AIO_COMPARATOR_H_
+#define ZEPHYR_INCLUDE_AIO_COMPARATOR_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,7 +48,7 @@ struct aio_cmp_driver_api {
  */
 __syscall int aio_cmp_disable(struct device *dev, u8_t index);
 
-static inline int _impl_aio_cmp_disable(struct device *dev, u8_t index)
+static inline int z_impl_aio_cmp_disable(struct device *dev, u8_t index)
 {
 	const struct aio_cmp_driver_api *api = dev->driver_api;
 
@@ -95,7 +95,7 @@ static inline int aio_cmp_configure(struct device *dev, u8_t index,
  */
 __syscall int aio_cmp_get_pending_int(struct device *dev);
 
-static inline int _impl_aio_cmp_get_pending_int(struct device *dev)
+static inline int z_impl_aio_cmp_get_pending_int(struct device *dev)
 {
 	struct aio_cmp_driver_api *api;
 
@@ -109,4 +109,4 @@ static inline int _impl_aio_cmp_get_pending_int(struct device *dev)
 
 #include <syscalls/aio_comparator.h>
 
-#endif /* _AIO_COMPARATOR_H_ */
+#endif /* ZEPHYR_INCLUDE_AIO_COMPARATOR_H_ */

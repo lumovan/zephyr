@@ -11,6 +11,8 @@
  */
 #include <logging/log.h>
 
+LOG_LEVEL_SET(LOG_LEVEL_INF);
+
 void sample_instance_call(struct sample_instance *inst)
 {
 	u8_t data[4] = { 1, 2, 3, 4 };
@@ -18,5 +20,5 @@ void sample_instance_call(struct sample_instance *inst)
 	LOG_INST_INF(inst->log, "counter_value: %d", inst->cnt++);
 	LOG_INST_HEXDUMP_WRN(inst->log, data, sizeof(data),
 					"Example of hexdump:");
-	memset(data, 0, sizeof(data));
+	(void)memset(data, 0, sizeof(data));
 }

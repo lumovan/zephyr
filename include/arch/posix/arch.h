@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _ARCH_IFACE_H
-#define _ARCH_IFACE_H
+#ifndef ZEPHYR_INCLUDE_ARCH_POSIX_ARCH_H_
+#define ZEPHYR_INCLUDE_ARCH_POSIX_ARCH_H_
 
 #include <toolchain.h>
 #include <irq.h>
@@ -45,17 +45,25 @@ struct __esf {
 typedef struct __esf NANO_ESF;
 extern const NANO_ESF _default_esf;
 
-extern u32_t _timer_cycle_get_32(void);
-#define _arch_k_cycle_get_32()  _timer_cycle_get_32()
+extern u32_t z_timer_cycle_get_32(void);
+#define z_arch_k_cycle_get_32()  z_timer_cycle_get_32()
 
-FUNC_NORETURN void _SysFatalErrorHandler(unsigned int reason,
+FUNC_NORETURN void z_SysFatalErrorHandler(unsigned int reason,
 					 const NANO_ESF *esf);
 
-FUNC_NORETURN void _NanoFatalErrorHandler(unsigned int reason,
+FUNC_NORETURN void z_NanoFatalErrorHandler(unsigned int reason,
 					  const NANO_ESF *esf);
+
+/**
+ * @brief Explicitly nop operation.
+ */
+static ALWAYS_INLINE void arch_nop(void)
+{
+	__asm__ volatile("nop");
+}
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _ARCH_IFACE_H */
+#endif /* ZEPHYR_INCLUDE_ARCH_POSIX_ARCH_H_ */

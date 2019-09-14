@@ -4,28 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef ZEPHYR_MISC_LIST_GEN_H
-#define ZEPHYR_MISC_LIST_GEN_H
+#ifndef ZEPHYR_INCLUDE_MISC_LIST_GEN_H_
+#define ZEPHYR_INCLUDE_MISC_LIST_GEN_H_
 
 #include <stddef.h>
 #include <stdbool.h>
 #include <misc/util.h>
 
 #define Z_GENLIST_FOR_EACH_NODE(__lname, __l, __sn)			\
-	for (__sn = sys_ ## __lname ## _peek_head(__l); __sn;		\
+	for (__sn = sys_ ## __lname ## _peek_head(__l); __sn != NULL;	\
 	     __sn = sys_ ## __lname ## _peek_next(__sn))
 
 
 #define Z_GENLIST_ITERATE_FROM_NODE(__lname, __l, __sn)			\
 	for (__sn = __sn ? sys_ ## __lname ## _peek_next_no_check(__sn)	\
 			 : sys_ ## __lname ## _peek_head(__l);		\
-	     __sn;							\
+	     __sn != NULL;						\
 	     __sn = sys_ ## __lname ## _peek_next(__sn))
 
 #define Z_GENLIST_FOR_EACH_NODE_SAFE(__lname, __l, __sn, __sns)		\
 	for (__sn = sys_ ## __lname ## _peek_head(__l),			\
 		     __sns = sys_ ## __lname ## _peek_next(__sn);	\
-	     __sn; __sn = __sns,					\
+	     __sn != NULL ; __sn = __sns,				\
 		     __sns = sys_ ## __lname ## _peek_next(__sn))
 
 #define Z_GENLIST_CONTAINER(__ln, __cn, __n)				\
@@ -45,20 +45,20 @@
 #define Z_GENLIST_FOR_EACH_CONTAINER(__lname, __l, __cn, __n)		\
 	for (__cn = Z_GENLIST_PEEK_HEAD_CONTAINER(__lname, __l, __cn,	\
 						  __n);			\
-	     __cn;							\
+	     __cn != NULL;						\
 	     __cn = Z_GENLIST_PEEK_NEXT_CONTAINER(__lname, __cn, __n))
 
 #define Z_GENLIST_FOR_EACH_CONTAINER_SAFE(__lname, __l, __cn, __cns, __n)     \
 	for (__cn = Z_GENLIST_PEEK_HEAD_CONTAINER(__lname, __l, __cn, __n),   \
-	     __cns = Z_GENLIST_PEEK_NEXT_CONTAINER(__lname, __cn, __n); __cn; \
-	     __cn = __cns,						      \
+	     __cns = Z_GENLIST_PEEK_NEXT_CONTAINER(__lname, __cn, __n); \
+	     __cn != NULL; __cn = __cns,				\
 	     __cns = Z_GENLIST_PEEK_NEXT_CONTAINER(__lname, __cn, __n))
 
 #define Z_GENLIST_IS_EMPTY(__lname)					\
 	static inline bool						\
 	sys_ ## __lname ## _is_empty(sys_ ## __lname ## _t *list)	\
 	{								\
-		return (!sys_ ## __lname ## _peek_head(list));		\
+		return (sys_ ## __lname ## _peek_head(list) == NULL);	\
 	}
 
 #define Z_GENLIST_PEEK_NEXT_NO_CHECK(__lname, __nname)			    \
@@ -72,7 +72,8 @@
 	static inline sys_ ## __nname ## _t *				     \
 	sys_ ## __lname ## _peek_next(sys_ ## __nname ## _t *node)	     \
 	{								     \
-		return node ? sys_ ## __lname ## _peek_next_no_check(node) : \
+		return node != NULL ?                                        \
+			sys_ ## __lname ## _peek_next_no_check(node) :       \
 			      NULL;					     \
 	}
 
@@ -85,7 +86,7 @@
 					sys_ ## __lname ## _peek_head(list)); \
 		z_ ## __lname ## _head_set(list, node);			      \
 									      \
-		if (!sys_ ## __lname ## _peek_tail(list)) {		      \
+		if (sys_ ## __lname ## _peek_tail(list) == NULL) {	      \
 			z_ ## __lname ## _tail_set(list,		      \
 					sys_ ## __lname ## _peek_head(list)); \
 		}							      \
@@ -98,7 +99,7 @@
 	{								\
 		z_ ## __nname ## _next_set(node, NULL);			\
 									\
-		if (!sys_ ## __lname ## _peek_tail(list)) {		\
+		if (sys_ ## __lname ## _peek_tail(list) == NULL) {	\
 			z_ ## __lname ## _tail_set(list, node);		\
 			z_ ## __lname ## _head_set(list, node);		\
 		} else {						\
@@ -114,7 +115,7 @@
 	sys_ ## __lname ## _append_list(sys_ ## __lname ## _t *list,	\
 					void *head, void *tail)		\
 {									\
-	if (!sys_ ## __lname ## _peek_tail(list)) {			\
+	if (sys_ ## __lname ## _peek_tail(list) == NULL) {		\
 		z_ ## __lname ## _head_set(list,			\
 					(sys_ ## __nname ## _t *)head); \
 	} else {							\
@@ -126,15 +127,16 @@
 				     (sys_ ## __nname ## _t *)tail);	\
 }
 
-#define Z_GENLIST_MERGE_LIST(__lname)					\
+#define Z_GENLIST_MERGE_LIST(__lname, __nname)				\
 	static inline void						\
 	sys_ ## __lname ## _merge_ ## __lname (				\
 				sys_ ## __lname ## _t *list,		\
 				sys_ ## __lname ## _t *list_to_append)	\
 	{								\
-		sys_ ## __lname ## _append_list(list,			\
-			sys_ ## __lname ## _peek_head(list_to_append),	\
-			sys_ ## __lname ## _peek_tail(list_to_append));	\
+		sys_ ## __nname ## _t *head, *tail;			\
+		head = sys_ ## __lname ## _peek_head(list_to_append);	\
+		tail = sys_ ## __lname ## _peek_tail(list_to_append);	\
+		sys_ ## __lname ## _append_list(list, head, tail);	\
 		sys_ ## __lname ## _init(list_to_append);		\
 	}
 
@@ -144,9 +146,9 @@
 				   sys_ ## __nname ## _t *prev,		\
 				   sys_ ## __nname ## _t *node)		\
 	{								\
-		if (!prev) {						\
+		if (prev == NULL) {					\
 			sys_ ## __lname ## _prepend(list, node);	\
-		} else if (!z_ ## __nname ## _next_peek(prev)) {	\
+		} else if (z_ ## __nname ## _next_peek(prev) == NULL) {	\
 			sys_ ## __lname ## _append(list, node);		\
 		} else {						\
 			z_ ## __nname ## _next_set(node,		\
@@ -186,7 +188,7 @@
 				   sys_ ## __nname ## _t *prev_node,	      \
 				   sys_ ## __nname ## _t *node)		      \
 	{								      \
-		if (!prev_node) {					      \
+		if (prev_node == NULL) {				      \
 			z_ ## __lname ## _head_set(list,		      \
 				z_ ## __nname ## _next_peek(node));	      \
 									      \
@@ -230,4 +232,4 @@
 		return false;						 \
 	}
 
-#endif /* ZEPHYR_MISC_LIST_GEN_H */
+#endif /* ZEPHYR_INCLUDE_MISC_LIST_GEN_H_ */

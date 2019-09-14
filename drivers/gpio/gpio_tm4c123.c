@@ -142,7 +142,7 @@ static int gpio_tm4c123_manage_callback(struct device* dev,
 {
     struct gpio_tm4c123_data* data = DEV_DATA(dev);
 
-    _gpio_manage_callback(&data->callbacks, callback, set);
+    gpio_manage_callback(&data->callbacks, callback, set);
 
     return 0;
 }
@@ -192,7 +192,7 @@ static void gpio_tm4c123_port_isr(void* arg)
     GPIOIntClear(config->port_base, int_status);
 
     /* Call the registered callbacks */
-    _gpio_fire_callbacks(&data->callbacks, (struct device*)dev,
+    gpio_fire_callbacks(&data->callbacks, (struct device*)dev,
         enabled_int);
 
     /* Re-enable the interrupts */

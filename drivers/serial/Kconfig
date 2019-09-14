@@ -28,12 +28,19 @@ config SERIAL_SUPPORT_INTERRUPT
 	  This is an option to be enabled by individual serial driver
 	  to signal that the driver and hardware supports interrupts.
 
+config UART_ASYNC_API
+	bool "Enable new asynchronous UART API [EXPERIMENTAL]"
+	help
+	  This option enables new asynchronous UART API.
+
+if UART_ASYNC_API=n
 config UART_INTERRUPT_DRIVEN
 	bool "Enable UART Interrupt support"
 	depends on SERIAL_SUPPORT_INTERRUPT
 	help
 	  This option enables interrupt support for UART allowing console
 	  input and other UART based drivers.
+endif
 
 config UART_LINE_CTRL
 	bool "Enable Serial Line Control API"
@@ -71,6 +78,8 @@ source "drivers/serial/Kconfig.imx"
 
 source "drivers/serial/Kconfig.stellaris"
 
+source "drivers/serial/Kconfig.native_posix"
+
 source "drivers/serial/Kconfig.nsim"
 
 source "drivers/serial/Kconfig.usart_sam"
@@ -89,8 +98,6 @@ source "drivers/serial/Kconfig.cc32xx"
 
 source "drivers/serial/Kconfig.cmsdk_apb"
 
-source "drivers/serial/Kconfig.riscv_qemu"
-
 source "drivers/serial/Kconfig.sifive"
 
 source "drivers/serial/Kconfig.esp32"
@@ -99,10 +106,18 @@ source "drivers/serial/Kconfig.tm4c123"
 
 source "drivers/serial/Kconfig.gecko"
 
+source "drivers/serial/Kconfig.leuart_gecko"
+
 source "drivers/serial/Kconfig.msp432p4xx"
 
 source "drivers/serial/Kconfig.sam0"
 
 source "drivers/serial/Kconfig.tm4c123"
 
-endif
+source "drivers/serial/Kconfig.psoc6"
+
+source "drivers/serial/Kconfig.pl011"
+
+source "drivers/serial/Kconfig.rv32m1_lpuart"
+
+endif # SERIAL

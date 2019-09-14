@@ -42,8 +42,8 @@
  *---------------------------------------------------------------------------*/
  
  
-#ifndef _CMSIS_OS_H
-#define _CMSIS_OS_H
+#ifndef ZEPHYR_INCLUDE_CMSIS_RTOS_V1_CMSIS_OS_H_
+#define ZEPHYR_INCLUDE_CMSIS_RTOS_V1_CMSIS_OS_H_
  
 /// \note MUST REMAIN UNCHANGED: \b osCMSIS identifies the CMSIS-RTOS API version.
 #define osCMSIS           0x10002      ///< API version (main [31:16] .sub [15:0])
@@ -266,7 +266,7 @@ uint32_t osKernelSysTick (void);
 /// Convert a microseconds value to a RTOS kernel system timer value.
 /// \param         microsec     time value in microseconds.
 /// \return time value normalized to the \ref osKernelSysTickFrequency
-#define osKernelSysTickMicroSec(microsec) (((uint64_t)microsec * (osKernelSysTickFrequency)) / 1000000)
+#define osKernelSysTickMicroSec(microsec) (((uint64_t)microsec * (osKernelSysTickFrequency)) / 1000000U)
  
 #endif    // System Timer available
  
@@ -712,4 +712,4 @@ osStatus osMailFree (osMailQId queue_id, void *mail);
 }
 #endif
  
-#endif  // _CMSIS_OS_H
+#endif  /* ZEPHYR_INCLUDE_CMSIS_RTOS_V1_CMSIS_OS_H_ */

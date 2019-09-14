@@ -49,7 +49,7 @@ int node_index(struct rbnode *n)
 }
 
 /* Our "lessthan" is just the location of the struct */
-int node_lessthan(struct rbnode *a, struct rbnode *b)
+bool node_lessthan(struct rbnode *a, struct rbnode *b)
 {
 	if (current_insertee) {
 		CHECK(a == current_insertee);
@@ -91,10 +91,10 @@ static int last_black_height;
 
 void check_rbnode(struct rbnode *node, int blacks_above)
 {
-	int side, bheight = blacks_above + _rb_is_black(node);
+	int side, bheight = blacks_above + z_rb_is_black(node);
 
 	for (side = 0; side < 2; side++) {
-		struct rbnode *ch = _rb_child(node, side);
+		struct rbnode *ch = z_rb_child(node, side);
 
 		if (ch) {
 			/* Basic tree requirement */
@@ -105,7 +105,7 @@ void check_rbnode(struct rbnode *node, int blacks_above)
 			}
 
 			/* Can't have adjacent red nodes */
-			CHECK(_rb_is_black(node) || _rb_is_black(ch));
+			CHECK(z_rb_is_black(node) || z_rb_is_black(ch));
 
 			/* Recurse */
 			check_rbnode(ch, bheight);
@@ -124,7 +124,7 @@ void check_rb(void)
 	last_black_height = 0;
 
 	CHECK(tree.root);
-	CHECK(_rb_is_black(tree.root));
+	CHECK(z_rb_is_black(tree.root));
 
 	check_rbnode(tree.root, 0);
 }
@@ -137,7 +137,7 @@ void _check_tree(int size, int use_foreach)
 	int nwalked = 0, i, ni;
 	struct rbnode *n, *last = NULL;
 
-	memset(walked_nodes, 0, sizeof(walked_nodes));
+	(void)memset(walked_nodes, 0, sizeof(walked_nodes));
 
 	if (use_foreach) {
 		RB_FOR_EACH(&tree, n) {
@@ -200,10 +200,10 @@ void test_tree(int size)
 	/* Small trees get checked after every op, big trees less often */
 	int small_tree = size <= 32;
 
-	memset(&tree, 0, sizeof(tree));
+	(void)memset(&tree, 0, sizeof(tree));
 	tree.lessthan_fn = node_lessthan;
-	memset(nodes, 0, sizeof(nodes));
-	memset(node_mask, 0, sizeof(node_mask));
+	(void)memset(nodes, 0, sizeof(nodes));
+	(void)memset(node_mask, 0, sizeof(node_mask));
 
 	for (j = 0; j < 10; j++) {
 		for (i = 0; i < size; i++) {

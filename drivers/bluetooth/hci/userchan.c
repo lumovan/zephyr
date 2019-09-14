@@ -9,7 +9,6 @@
 #include <zephyr.h>
 #include <device.h>
 #include <init.h>
-#include <board.h>
 #include <misc/util.h>
 #include <misc/byteorder.h>
 
@@ -30,6 +29,7 @@
 #include <bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
+#define LOG_MODULE_NAME bt_driver
 #include "common/log.h"
 
 #define BTPROTO_HCI      1
@@ -47,8 +47,8 @@ struct sockaddr_hci {
 #define H4_SCO           0x03
 #define H4_EVT           0x04
 
-static BT_STACK_NOINIT(rx_thread_stack,
-		       CONFIG_ARCH_POSIX_RECOMMENDED_STACK_SIZE);
+static K_THREAD_STACK_DEFINE(rx_thread_stack,
+			     CONFIG_ARCH_POSIX_RECOMMENDED_STACK_SIZE);
 static struct k_thread rx_thread_data;
 
 static int uc_fd = -1;
@@ -57,16 +57,11 @@ static int bt_dev_index = -1;
 
 static struct net_buf *get_rx(const u8_t *buf)
 {
-	if (buf[0] == H4_EVT && (buf[1] == BT_HCI_EVT_CMD_COMPLETE ||
-				 buf[1] == BT_HCI_EVT_CMD_STATUS)) {
-		return bt_buf_get_cmd_complete(K_FOREVER);
+	if (buf[0] == H4_EVT) {
+		return bt_buf_get_evt(buf[1], false, K_FOREVER);
 	}
 
-	if (buf[0] == H4_ACL) {
-		return bt_buf_get_rx(BT_BUF_ACL_IN, K_FOREVER);
-	} else {
-		return bt_buf_get_rx(BT_BUF_EVT, K_FOREVER);
-	}
+	return bt_buf_get_rx(BT_BUF_ACL_IN, K_FOREVER);
 }
 
 static bool uc_ready(void)
@@ -164,7 +159,7 @@ static int user_chan_open(u16_t index)
 		return -errno;
 	}
 
-	memset(&addr, 0, sizeof(addr));
+	(void)memset(&addr, 0, sizeof(addr));
 	addr.hci_family = AF_BLUETOOTH;
 	addr.hci_dev = index;
 	addr.hci_channel = HCI_CHANNEL_USER;
@@ -213,7 +208,7 @@ static const struct bt_hci_driver drv = {
 	.send		= uc_send,
 };
 
-static int _bt_uc_init(struct device *unused)
+static int bt_uc_init(struct device *unused)
 {
 	ARG_UNUSED(unused);
 
@@ -222,7 +217,7 @@ static int _bt_uc_init(struct device *unused)
 	return 0;
 }
 
-SYS_INIT(_bt_uc_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+SYS_INIT(bt_uc_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
 
 static void cmd_bt_dev_found(char *argv, int offset)
 {

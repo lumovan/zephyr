@@ -9,8 +9,8 @@
  * @brief Public API for SPI drivers and applications
  */
 
-#ifndef __SPI_H__
-#define __SPI_H__
+#ifndef ZEPHYR_INCLUDE_SPI_H_
+#define ZEPHYR_INCLUDE_SPI_H_
 
 /**
  * @brief SPI Interface
@@ -139,7 +139,6 @@ struct spi_cs_control {
 /**
  * @brief SPI controller configuration structure
  *
- * @param dev is a valid pointer to an actual SPI device
  * @param frequency is the bus frequency in Hertz
  * @param operation is a bit field with the following parts:
  *
@@ -253,7 +252,7 @@ __syscall int spi_transceive(struct device *dev,
 			     const struct spi_buf_set *tx_bufs,
 			     const struct spi_buf_set *rx_bufs);
 
-static inline int _impl_spi_transceive(struct device *dev,
+static inline int z_impl_spi_transceive(struct device *dev,
 				       const struct spi_config *config,
 				       const struct spi_buf_set *tx_bufs,
 				       const struct spi_buf_set *rx_bufs)
@@ -404,7 +403,7 @@ static inline int spi_write_async(struct device *dev,
 __syscall int spi_release(struct device *dev,
 			  const struct spi_config *config);
 
-static inline int _impl_spi_release(struct device *dev,
+static inline int z_impl_spi_release(struct device *dev,
 				    const struct spi_config *config)
 {
 	const struct spi_driver_api *api =
@@ -423,4 +422,4 @@ static inline int _impl_spi_release(struct device *dev,
 
 #include <syscalls/spi.h>
 
-#endif /* __SPI_H__ */
+#endif /* ZEPHYR_INCLUDE_SPI_H_ */

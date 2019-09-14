@@ -14,7 +14,9 @@ void metal_io_init(struct metal_io_region *io, void *virt,
 	      unsigned page_shift, unsigned int mem_flags,
 	      const struct metal_io_ops *ops)
 {
-	const struct metal_io_ops nops = {NULL, NULL, NULL, NULL, NULL, NULL};
+	const struct metal_io_ops nops = {
+		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+	};
 
 	io->virt = virt;
 	io->physmap = physmap;
@@ -33,10 +35,11 @@ void metal_io_init(struct metal_io_region *io, void *virt,
 int metal_io_block_read(struct metal_io_region *io, unsigned long offset,
 	       void *restrict dst, int len)
 {
-	void *ptr = metal_io_virt(io, offset);
+	unsigned char *ptr = metal_io_virt(io, offset);
+	unsigned char *dest = dst;
 	int retlen;
 
-	if (offset > io->size)
+	if (offset >= io->size)
 		return -ERANGE;
 	if ((offset + len) > io->size)
 		len = io->size - offset;
@@ -47,20 +50,20 @@ int metal_io_block_read(struct metal_io_region *io, unsigned long offset,
 	} else {
 		atomic_thread_fence(memory_order_seq_cst);
 		while ( len && (
-			((uintptr_t)dst % sizeof(int)) ||
+			((uintptr_t)dest % sizeof(int)) ||
 			((uintptr_t)ptr % sizeof(int)))) {
-			*(unsigned char *)dst =
+			*(unsigned char *)dest =
 				*(const unsigned char *)ptr;
-			dst++;
+			dest++;
 			ptr++;
 			len--;
 		}
-		for (; len >= (int)sizeof(int); dst += sizeof(int),
+		for (; len >= (int)sizeof(int); dest += sizeof(int),
 					ptr += sizeof(int),
 					len -= sizeof(int))
-			*(unsigned int *)dst = *(const unsigned int *)ptr;
-		for (; len != 0; dst++, ptr++, len--)
-			*(unsigned char *)dst =
+			*(unsigned int *)dest = *(const unsigned int *)ptr;
+		for (; len != 0; dest++, ptr++, len--)
+			*(unsigned char *)dest =
 				*(const unsigned char *)ptr;
 	}
 	return retlen;
@@ -69,10 +72,11 @@ int metal_io_block_read(struct metal_io_region *io, unsigned long offset,
 int metal_io_block_write(struct metal_io_region *io, unsigned long offset,
 	       const void *restrict src, int len)
 {
-	void *ptr = metal_io_virt(io, offset);
+	unsigned char *ptr = metal_io_virt(io, offset);
+	const unsigned char *source = src;
 	int retlen;
 
-	if (offset > io->size)
+	if (offset >= io->size)
 		return -ERANGE;
 	if ((offset + len) > io->size)
 		len = io->size - offset;
@@ -83,20 +87,20 @@ int metal_io_block_write(struct metal_io_region *io, unsigned long offset,
 	} else {
 		while ( len && (
 			((uintptr_t)ptr % sizeof(int)) ||
-			((uintptr_t)src % sizeof(int)))) {
+			((uintptr_t)source % sizeof(int)))) {
 			*(unsigned char *)ptr =
-				*(const unsigned char *)src;
+				*(const unsigned char *)source;
 			ptr++;
-			src++;
+			source++;
 			len--;
 		}
 		for (; len >= (int)sizeof(int); ptr += sizeof(int),
-					src += sizeof(int),
+					source += sizeof(int),
 					len -= sizeof(int))
-			*(unsigned int *)ptr = *(const unsigned int *)src;
-		for (; len != 0; ptr++, src++, len--)
+			*(unsigned int *)ptr = *(const unsigned int *)source;
+		for (; len != 0; ptr++, source++, len--)
 			*(unsigned char *)ptr =
-				*(const unsigned char *)src;
+				*(const unsigned char *)source;
 		atomic_thread_fence(memory_order_seq_cst);
 	}
 	return retlen;
@@ -105,10 +109,10 @@ int metal_io_block_write(struct metal_io_region *io, unsigned long offset,
 int metal_io_block_set(struct metal_io_region *io, unsigned long offset,
 	       unsigned char value, int len)
 {
-	void *ptr = metal_io_virt(io, offset);
+	unsigned char *ptr = metal_io_virt(io, offset);
 	int retlen = len;
 
-	if (offset > io->size)
+	if (offset >= io->size)
 		return -ERANGE;
 	if ((offset + len) > io->size)
 		len = io->size - offset;
@@ -121,7 +125,7 @@ int metal_io_block_set(struct metal_io_region *io, unsigned long offset,
 		unsigned int i;
 
 		for (i = 1; i < sizeof(int); i++)
-			cint |= ((unsigned int)value << (8 * i));
+			cint |= ((unsigned int)value << (CHAR_BIT * i));
 
 		for (; len && ((uintptr_t)ptr % sizeof(int)); ptr++, len--)
 			*(unsigned char *)ptr = (unsigned char) value;

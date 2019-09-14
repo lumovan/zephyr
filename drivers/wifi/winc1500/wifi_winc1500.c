@@ -4,13 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define SYS_LOG_LEVEL CONFIG_SYS_LOG_WIFI_LEVEL
-#define SYS_LOG_DOMAIN "dev/winc1500"
-#if (SYS_LOG_LEVEL > SYS_LOG_LEVEL_OFF)
-#define NET_LOG_ENABLED 1
-#endif
+#define LOG_MODULE_NAME wifi_winc1500
+#define LOG_LEVEL CONFIG_WIFI_LOG_LEVEL
 
-#include <logging/sys_log.h>
+#include <logging/log.h>
+LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <zephyr.h>
 #include <kernel.h>
@@ -121,6 +119,7 @@ typedef struct {
 
 #define WINC1500_BIND_TIMEOUT 500
 #define WINC1500_LISTEN_TIMEOUT 500
+#define WINC1500_BUF_TIMEOUT 100
 
 NET_BUF_POOL_DEFINE(winc1500_tx_pool, CONFIG_WIFI_WINC1500_BUF_CTR,
 		    CONFIG_WIFI_WINC1500_MAX_PACKET_SIZE, 0, NULL);
@@ -159,12 +158,12 @@ struct winc1500_data {
 
 static struct winc1500_data w1500_data;
 
-#if (SYS_LOG_LEVEL > SYS_LOG_LEVEL_OFF)
+#if LOG_LEVEL > LOG_LEVEL_OFF
 
 static void stack_stats(void)
 {
 	net_analyze_stack("WINC1500 stack",
-			  K_THREAD_STACK_BUFFER(winc1500_stack),
+			  Z_THREAD_STACK_BUFFER(winc1500_stack),
 			  K_THREAD_STACK_SIZEOF(winc1500_stack));
 }
 
@@ -289,7 +288,7 @@ static char *socket_message_to_string(u8_t message)
 	}
 }
 
-#endif /* (SYS_LOG_LEVEL > SYS_LOG_LEVEL_OFF) */
+#endif /* LOG_LEVEL > LOG_LEVEL_OFF */
 
 /**
  * This function is called when the socket is to be opened.
@@ -302,13 +301,13 @@ static int winc1500_get(sa_family_t family,
 	struct socket_data *sd;
 
 	if (family != AF_INET) {
-		SYS_LOG_ERR("Only AF_INET is supported!");
+		LOG_ERR("Only AF_INET is supported!");
 		return -1;
 	}
 
 	(*context)->offload_context = (void *)(sint32)socket(family, type, 0);
 	if ((*context)->offload_context < 0) {
-		SYS_LOG_ERR("socket error!");
+		LOG_ERR("socket error!");
 		return -1;
 	}
 
@@ -332,21 +331,21 @@ static int winc1500_bind(struct net_context *context,
 	int ret;
 
 	/* FIXME atmel winc1500 don't support bind on null port */
-	if (net_sin(addr)->sin_port == 0) {
+	if (net_sin(addr)->sin_port == 0U) {
 		return 0;
 	}
 
 	ret = bind((int)context->offload_context, (struct sockaddr *)addr,
 		   addrlen);
 	if (ret) {
-		SYS_LOG_ERR("bind error %d %s!",
-			    ret, socket_message_to_string(ret));
+		LOG_ERR("bind error %d %s!",
+			ret, socket_message_to_string(ret));
 		return ret;
 	}
 
 	if (k_sem_take(&w1500_data.socket_data[socket].wait_sem,
 		       WINC1500_BIND_TIMEOUT)) {
-		SYS_LOG_ERR("bind error timeout expired");
+		LOG_ERR("bind error timeout expired");
 		return -ETIMEDOUT;
 	}
 
@@ -364,8 +363,8 @@ static int winc1500_listen(struct net_context *context, int backlog)
 
 	ret = listen((int)context->offload_context, backlog);
 	if (ret) {
-		SYS_LOG_ERR("listen error %d %s!",
-			    ret, socket_error_string(ret));
+		LOG_ERR("listen error %d %s!",
+			ret, socket_error_string(ret));
 		return ret;
 	}
 
@@ -397,8 +396,8 @@ static int winc1500_connect(struct net_context *context,
 
 	ret = connect(socket, (struct sockaddr *)addr, addrlen);
 	if (ret) {
-		SYS_LOG_ERR("connect error %d %s!",
-			    ret, socket_error_string(ret));
+		LOG_ERR("connect error %d %s!",
+			ret, socket_error_string(ret));
 		return ret;
 	}
 
@@ -426,8 +425,8 @@ static int winc1500_accept(struct net_context *context,
 
 	ret = accept(socket, NULL, 0);
 	if (ret) {
-		SYS_LOG_ERR("accept error %d %s!",
-			    ret, socket_error_string(ret));
+		LOG_ERR("accept error %d %s!",
+			ret, socket_error_string(ret));
 		return ret;
 	}
 
@@ -450,45 +449,39 @@ static int winc1500_accept(struct net_context *context,
 static int winc1500_send(struct net_pkt *pkt,
 			 net_context_send_cb_t cb,
 			 s32_t timeout,
-			 void *token,
 			 void *user_data)
 {
 	struct net_context *context = pkt->context;
 	SOCKET socket = (int)context->offload_context;
-	bool first_frag;
-	struct net_buf *frag;
-	int ret;
+	int ret = 0;
+	struct net_buf *buf;
+
+	buf = net_buf_alloc(&winc1500_tx_pool, WINC1500_BUF_TIMEOUT);
+	if (!buf) {
+		return -ENOBUFS;
+	}
 
 	w1500_data.socket_data[socket].send_cb = cb;
 	w1500_data.socket_data[socket].send_user_data = user_data;
 
-	first_frag = true;
+	if (net_pkt_read(pkt, buf->data, net_pkt_get_len(pkt))) {
+		ret = -ENOBUFS;
+		goto out;
+	}
 
-	for (frag = pkt->frags; frag; frag = frag->frags) {
-		u8_t *data_ptr;
-		u16_t data_len;
+	net_buf_add(buf, net_pkt_get_len(pkt));
 
-		if (first_frag) {
-			data_ptr = net_pkt_ll(pkt);
-			data_len = net_pkt_ll_reserve(pkt) + frag->len;
-			first_frag = false;
-		} else {
-			data_ptr = frag->data;
-			data_len = frag->len;
-
-		}
-
-		ret = send(socket, data_ptr, data_len, 0);
-		if (ret) {
-			SYS_LOG_ERR("send error %d %s!",
-				    ret, socket_error_string(ret));
-			return ret;
-		}
+	ret = send(socket, buf->data, buf->len, 0);
+	if (ret) {
+		LOG_ERR("send error %d %s!", ret, socket_error_string(ret));
+		goto out;
 	}
 
 	net_pkt_unref(pkt);
+out:
+	net_buf_unref(buf);
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -499,45 +492,40 @@ static int winc1500_sendto(struct net_pkt *pkt,
 			   socklen_t addrlen,
 			   net_context_send_cb_t cb,
 			   s32_t timeout,
-			   void *token,
 			   void *user_data)
 {
 	struct net_context *context = pkt->context;
 	SOCKET socket = (int)context->offload_context;
-	bool first_frag;
-	struct net_buf *frag;
-	int ret;
+	int ret = 0;
+	struct net_buf *buf;
+
+	buf = net_buf_alloc(&winc1500_tx_pool, WINC1500_BUF_TIMEOUT);
+	if (!buf) {
+		return -ENOBUFS;
+	}
 
 	w1500_data.socket_data[socket].send_cb = cb;
 	w1500_data.socket_data[socket].send_user_data = user_data;
 
-	first_frag = true;
+	if (net_pkt_read(pkt, buf->data, net_pkt_get_len(pkt))) {
+		ret = -ENOBUFS;
+		goto out;
+	}
 
-	for (frag = pkt->frags; frag; frag = frag->frags) {
-		u8_t *data_ptr;
-		u16_t data_len;
+	net_buf_add(buf, net_pkt_get_len(pkt));
 
-		if (first_frag) {
-			data_ptr = net_pkt_ll(pkt);
-			data_len = net_pkt_ll_reserve(pkt) + frag->len;
-			first_frag = false;
-		} else {
-			data_ptr = frag->data;
-			data_len = frag->len;
-		}
-
-		ret = sendto(socket, data_ptr, data_len, 0,
-			     (struct sockaddr *)dst_addr, addrlen);
-		if (ret) {
-			SYS_LOG_ERR("send error %d %s!",
-				    ret, socket_error_string(ret));
-			return ret;
-		}
+	ret = sendto(socket, buf->data, buf->len, 0,
+		     (struct sockaddr *)dst_addr, addrlen);
+	if (ret) {
+		LOG_ERR("sendto error %d %s!", ret, socket_error_string(ret));
+		goto out;
 	}
 
 	net_pkt_unref(pkt);
+out:
+	net_buf_unref(buf);
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -545,21 +533,22 @@ static int winc1500_sendto(struct net_pkt *pkt,
 static int prepare_pkt(struct socket_data *sock_data)
 {
 	/* Get the frame from the buffer */
-	sock_data->rx_pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
+	sock_data->rx_pkt = net_pkt_rx_alloc_on_iface(w1500_data.iface,
+						      K_NO_WAIT);
 	if (!sock_data->rx_pkt) {
-		SYS_LOG_ERR("Could not allocate rx packet");
+		LOG_ERR("Could not allocate rx packet");
 		return -1;
 	}
 
-	/* Reserve a data frag to receive the frame */
-	sock_data->pkt_buf = net_pkt_get_frag(sock_data->rx_pkt, K_NO_WAIT);
+	/* Reserve a data buffer to receive the frame */
+	sock_data->pkt_buf = net_buf_alloc(&winc1500_rx_pool, K_NO_WAIT);
 	if (!sock_data->pkt_buf) {
-		SYS_LOG_ERR("Could not allocate data frag");
+		LOG_ERR("Could not allocate data buffer");
 		net_pkt_unref(sock_data->rx_pkt);
 		return -1;
 	}
 
-	net_pkt_frag_insert(sock_data->rx_pkt, sock_data->pkt_buf);
+	net_pkt_append_buffer(sock_data->rx_pkt, sock_data->pkt_buf);
 
 	return 0;
 }
@@ -578,7 +567,7 @@ static int winc1500_recv(struct net_context *context,
 
 	ret = prepare_pkt(&w1500_data.socket_data[socket]);
 	if (ret) {
-		SYS_LOG_ERR("Could not reserve packet buffer");
+		LOG_ERR("Could not reserve packet buffer");
 		return -ENOMEM;
 	}
 
@@ -588,8 +577,8 @@ static int winc1500_recv(struct net_context *context,
 	ret = recv(socket, w1500_data.socket_data[socket].pkt_buf->data,
 		   CONFIG_WIFI_WINC1500_MAX_PACKET_SIZE, timeout);
 	if (ret) {
-		SYS_LOG_ERR("recv error %d %s!",
-			    ret, socket_error_string(ret));
+		LOG_ERR("recv error %d %s!",
+			ret, socket_error_string(ret));
 		return ret;
 	}
 
@@ -623,7 +612,7 @@ static void handle_wifi_con_state_changed(void *pvMsg)
 
 	switch (pstrWifiState->u8CurrState) {
 	case M2M_WIFI_DISCONNECTED:
-		SYS_LOG_DBG("Disconnected (%u)", pstrWifiState->u8ErrCode);
+		LOG_DBG("Disconnected (%u)", pstrWifiState->u8ErrCode);
 
 		if (w1500_data.connecting) {
 			wifi_mgmt_raise_connect_result_event(w1500_data.iface,
@@ -638,7 +627,7 @@ static void handle_wifi_con_state_changed(void *pvMsg)
 
 		break;
 	case M2M_WIFI_CONNECTED:
-		SYS_LOG_DBG("Connected (%u)", pstrWifiState->u8ErrCode);
+		LOG_DBG("Connected (%u)", pstrWifiState->u8ErrCode);
 
 		w1500_data.connected = true;
 		wifi_mgmt_raise_connect_result_event(w1500_data.iface, 0);
@@ -646,7 +635,7 @@ static void handle_wifi_con_state_changed(void *pvMsg)
 		break;
 	case M2M_WIFI_UNDEF:
 		/* TODO status undefined*/
-		SYS_LOG_DBG("Undefined?");
+		LOG_DBG("Undefined?");
 		break;
 	}
 }
@@ -658,14 +647,14 @@ static void handle_wifi_dhcp_conf(void *pvMsg)
 	u8_t i;
 
 	/* Connected and got IP address*/
-	SYS_LOG_DBG("Wi-Fi connected, IP is %u.%u.%u.%u",
-		    pu8IPAddress[0], pu8IPAddress[1],
-		    pu8IPAddress[2], pu8IPAddress[3]);
+	LOG_DBG("Wi-Fi connected, IP is %u.%u.%u.%u",
+		pu8IPAddress[0], pu8IPAddress[1],
+		pu8IPAddress[2], pu8IPAddress[3]);
 
 	/* TODO at this point the standby mode should be enable
 	 * status = WiFi connected IP assigned
 	 */
-	for (i = 0; i < 4; i++) {
+	for (i = 0U; i < 4; i++) {
 		addr.s4_addr[i] = pu8IPAddress[i];
 	}
 
@@ -677,7 +666,7 @@ static void handle_wifi_dhcp_conf(void *pvMsg)
 static void reset_scan_data(void)
 {
 	w1500_data.scan_cb = NULL;
-	w1500_data.scan_result = 0;
+	w1500_data.scan_result = 0U;
 }
 
 static void handle_scan_result(void *pvMsg)
@@ -694,8 +683,8 @@ static void handle_scan_result(void *pvMsg)
 	} else if (pstrScanResult->u8AuthType == M2M_WIFI_SEC_WPA_PSK) {
 		result.security = WIFI_SECURITY_TYPE_PSK;
 	} else {
-		SYS_LOG_DBG("Security %u not supported",
-			    pstrScanResult->u8AuthType);
+		LOG_DBG("Security %u not supported",
+			pstrScanResult->u8AuthType);
 		goto out;
 	}
 
@@ -731,21 +720,21 @@ static void handle_scan_done(void *pvMsg)
 		w1500_data.scan_cb(w1500_data.iface, -EIO, NULL);
 		reset_scan_data();
 
-		SYS_LOG_ERR("Scan failed.");
+		LOG_ERR("Scan failed.");
 
 		return;
 	}
 
-	w1500_data.scan_result = 0;
+	w1500_data.scan_result = 0U;
 
 	if (pstrInfo->u8NumofCh >= 1) {
-		SYS_LOG_DBG("Requesting results (%u)",
-			    m2m_wifi_get_num_ap_found());
+		LOG_DBG("Requesting results (%u)",
+			m2m_wifi_get_num_ap_found());
 
 		m2m_wifi_req_scan_result(w1500_data.scan_result);
 		w1500_data.scan_result++;
 	} else {
-		SYS_LOG_DBG("No AP found");
+		LOG_DBG("No AP found");
 
 		w1500_data.scan_cb(w1500_data.iface, 0, NULL);
 		reset_scan_data();
@@ -754,8 +743,8 @@ static void handle_scan_done(void *pvMsg)
 
 static void winc1500_wifi_cb(u8_t message_type, void *pvMsg)
 {
-	SYS_LOG_DBG("Msg Type %d %s",
-		    message_type, wifi_cb_msg_2_str(message_type));
+	LOG_DBG("Msg Type %d %s",
+		message_type, wifi_cb_msg_2_str(message_type));
 
 	switch (message_type) {
 	case M2M_WIFI_RESP_CON_STATE_CHANGED:
@@ -781,8 +770,8 @@ static void handle_socket_msg_connect(struct socket_data *sd, void *pvMsg)
 {
 	tstrSocketConnectMsg *strConnMsg = (tstrSocketConnectMsg *)pvMsg;
 
-	SYS_LOG_ERR("CONNECT: socket %d error %d",
-		    strConnMsg->sock, strConnMsg->s8Error);
+	LOG_ERR("CONNECT: socket %d error %d",
+		strConnMsg->sock, strConnMsg->s8Error);
 
 	if (sd->connect_cb) {
 		sd->connect_cb(sd->context,
@@ -800,15 +789,13 @@ static bool handle_socket_msg_recv(SOCKET sock,
 	tstrSocketRecvMsg *pstrRx = (tstrSocketRecvMsg *)pvMsg;
 
 	if ((pstrRx->pu8Buffer != NULL) && (pstrRx->s16BufferSize > 0)) {
-
 		net_buf_add(sd->pkt_buf, pstrRx->s16BufferSize);
-
-		net_pkt_set_appdata(sd->rx_pkt, sd->pkt_buf->data);
-		net_pkt_set_appdatalen(sd->rx_pkt, pstrRx->s16BufferSize);
+		net_pkt_cursor_init(sd->rx_pkt);
 
 		if (sd->recv_cb) {
 			sd->recv_cb(sd->context,
 				    sd->rx_pkt,
+				    NULL, NULL,
 				    0,
 				    sd->recv_user_data);
 			}
@@ -820,12 +807,15 @@ static bool handle_socket_msg_recv(SOCKET sock,
 	}
 
 	if (prepare_pkt(sd)) {
-		SYS_LOG_ERR("Could not reserve packet buffer");
+		LOG_ERR("Could not reserve packet buffer");
 		return false;
 	}
 
-	recv(sock, sd->pkt_buf->data,
-	     CONFIG_WIFI_WINC1500_MAX_PACKET_SIZE, K_NO_WAIT);
+	if (recv(sock, sd->pkt_buf->data,
+		 CONFIG_WIFI_WINC1500_MAX_PACKET_SIZE, K_NO_WAIT)) {
+		LOG_ERR("Could not receive packet in the buffer");
+		return false;
+	}
 
 	return true;
 }
@@ -839,9 +829,9 @@ static void handle_socket_msg_bind(struct socket_data *sd, void *pvMsg)
 	 */
 
 	if (bind_msg->status) {
-		SYS_LOG_ERR("BIND: error %d %s",
-			    bind_msg->status,
-			    socket_message_to_string(bind_msg->status));
+		LOG_ERR("BIND: error %d %s",
+			bind_msg->status,
+			socket_message_to_string(bind_msg->status));
 		sd->ret_code = bind_msg->status;
 	}
 }
@@ -855,9 +845,9 @@ static void handle_socket_msg_listen(struct socket_data *sd, void *pvMsg)
 	 */
 
 	if (listen_msg->status) {
-		SYS_LOG_ERR("winc1500_socket_cb:LISTEN: error %d %s",
-			    listen_msg->status,
-			    socket_message_to_string(listen_msg->status));
+		LOG_ERR("winc1500_socket_cb:LISTEN: error %d %s",
+			listen_msg->status,
+			socket_message_to_string(listen_msg->status));
 		sd->ret_code = listen_msg->status;
 	}
 }
@@ -872,18 +862,18 @@ static void handle_socket_msg_accept(struct socket_data *sd, void *pvMsg)
 	 * of the accept operation.
 	 */
 
-	SYS_LOG_DBG("ACCEPT: from %d.%d.%d.%d:%d, new socket is %d",
-		    accept_msg->strAddr.sin_addr.s4_addr[0],
-		    accept_msg->strAddr.sin_addr.s4_addr[1],
-		    accept_msg->strAddr.sin_addr.s4_addr[2],
-		    accept_msg->strAddr.sin_addr.s4_addr[3],
-		    ntohs(accept_msg->strAddr.sin_port),
-		    accept_msg->sock);
+	LOG_DBG("ACCEPT: from %d.%d.%d.%d:%d, new socket is %d",
+		accept_msg->strAddr.sin_addr.s4_addr[0],
+		accept_msg->strAddr.sin_addr.s4_addr[1],
+		accept_msg->strAddr.sin_addr.s4_addr[2],
+		accept_msg->strAddr.sin_addr.s4_addr[3],
+		ntohs(accept_msg->strAddr.sin_port),
+		accept_msg->sock);
 
 	if (accept_msg->sock < 0) {
-		SYS_LOG_ERR("ACCEPT: error %d %s",
-			    accept_msg->sock,
-			    socket_message_to_string(accept_msg->sock));
+		LOG_ERR("ACCEPT: error %d %s",
+			accept_msg->sock,
+			socket_message_to_string(accept_msg->sock));
 		sd->ret_code = accept_msg->sock;
 	}
 
@@ -898,7 +888,7 @@ static void handle_socket_msg_accept(struct socket_data *sd, void *pvMsg)
 		ret = net_context_get(AF_INET, SOCK_STREAM,
 				      IPPROTO_TCP, &a_sd->context);
 		if (ret < 0) {
-			SYS_LOG_ERR("Cannot get new net context for ACCEPT");
+			LOG_ERR("Cannot get new net context for ACCEPT");
 		} else {
 			a_sd->context->offload_context =
 				(void *)((int)accept_msg->sock);
@@ -918,8 +908,8 @@ static void winc1500_socket_cb(SOCKET sock, uint8 message, void *pvMsg)
 	struct socket_data *sd = &w1500_data.socket_data[sock];
 
 	if (message != 6) {
-		SYS_LOG_DBG(": sock %d Msg %d %s",
-			    sock, message, socket_message_to_string(message));
+		LOG_DBG("sock %d Msg %d %s",
+			sock, message, socket_message_to_string(message));
 	}
 
 	sd->ret_code = 0;
@@ -1013,11 +1003,12 @@ static int winc1500_mgmt_connect(struct device *dev,
 		channel = params->channel;
 	}
 
-	SYS_LOG_DBG("Connecting to %s (%u) on channel %u %s security (%s)",
-		    ssid, params->ssid_length,
-		    channel == M2M_WIFI_CH_ALL ? "unknown" : channel,
-		    security == M2M_WIFI_SEC_OPEN ? "without" : "with",
-		    params->psk ? (char *)psk.au8PSK : "");
+	LOG_DBG("Connecting to %s (%u) on %s %u %s security (%s)",
+		ssid, params->ssid_length,
+		channel == M2M_WIFI_CH_ALL ? "channel unknown" : "channel",
+		channel,
+		security == M2M_WIFI_SEC_OPEN ? "without" : "with",
+		params->psk ? (char *)psk.au8PSK : "");
 
 	if (m2m_wifi_connect((char *)ssid, params->ssid_length,
 			     security, auth, channel)) {
@@ -1044,10 +1035,10 @@ static int winc1500_mgmt_disconnect(struct device *device)
 
 static void winc1500_iface_init(struct net_if *iface)
 {
-	SYS_LOG_DBG("eth_init:net_if_set_link_addr:"
-		    "MAC Address %02X:%02X:%02X:%02X:%02X:%02X",
-		    w1500_data.mac[0], w1500_data.mac[1], w1500_data.mac[2],
-		    w1500_data.mac[3], w1500_data.mac[4], w1500_data.mac[5]);
+	LOG_DBG("eth_init:net_if_set_link_addr:"
+		"MAC Address %02X:%02X:%02X:%02X:%02X:%02X",
+		w1500_data.mac[0], w1500_data.mac[1], w1500_data.mac[2],
+		w1500_data.mac[3], w1500_data.mac[4], w1500_data.mac[5]);
 
 	net_if_set_link_addr(iface, w1500_data.mac, sizeof(w1500_data.mac),
 			     NET_LINK_ETHERNET);
@@ -1079,7 +1070,7 @@ static int winc1500_init(struct device *dev)
 
 	ret = m2m_wifi_init(&param);
 	if (ret) {
-		SYS_LOG_ERR("m2m_wifi_init return error!(%d)", ret);
+		LOG_ERR("m2m_wifi_init return error!(%d)", ret);
 		return -EIO;
 	}
 
@@ -1089,11 +1080,11 @@ static int winc1500_init(struct device *dev)
 	registerSocketCallback(winc1500_socket_cb, NULL);
 
 	m2m_wifi_get_otp_mac_address(w1500_data.mac, &is_valid);
-	SYS_LOG_DBG("WINC1500 MAC Address from OTP (%d) "
-		    "%02X:%02X:%02X:%02X:%02X:%02X",
-		    is_valid,
-		    w1500_data.mac[0], w1500_data.mac[1], w1500_data.mac[2],
-		    w1500_data.mac[3], w1500_data.mac[4], w1500_data.mac[5]);
+	LOG_DBG("WINC1500 MAC Address from OTP (%d) "
+		"%02X:%02X:%02X:%02X:%02X:%02X",
+		is_valid,
+		w1500_data.mac[0], w1500_data.mac[1], w1500_data.mac[2],
+		w1500_data.mac[3], w1500_data.mac[4], w1500_data.mac[5]);
 
 	m2m_wifi_set_power_profile(PWR_LOW1);
 	m2m_wifi_set_tx_power(TX_PWR_LOW);
@@ -1105,7 +1096,7 @@ static int winc1500_init(struct device *dev)
 			K_PRIO_COOP(CONFIG_WIFI_WINC1500_THREAD_PRIO),
 			0, K_NO_WAIT);
 
-	SYS_LOG_DBG("WINC1500 driver Initialized");
+	LOG_DBG("WINC1500 driver Initialized");
 
 	return 0;
 }

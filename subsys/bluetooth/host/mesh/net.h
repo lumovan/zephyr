@@ -95,6 +95,7 @@ struct bt_mesh_friend {
 	      valid:1,
 	      established:1;
 	s32_t poll_to;
+	u8_t  num_elem;
 	u16_t lpn_counter;
 	u16_t counter;
 
@@ -106,6 +107,12 @@ struct bt_mesh_friend {
 
 	struct bt_mesh_friend_seg {
 		sys_slist_t queue;
+
+		/* The target number of segments, i.e. not necessarily
+		 * the current number of segments, in the queue. This is
+		 * used for Friend Queue free space calculations.
+		 */
+		u8_t        seg_count;
 	} seg[FRIEND_SEG_RX];
 
 	struct net_buf *last;
@@ -190,8 +197,16 @@ struct bt_mesh_lpn {
 	ATOMIC_DEFINE(to_remove, LPN_GROUPS);
 };
 
-/* bt_mesh_net.flags, mainly used for pending storage actions */
+/* bt_mesh_net.flags */
 enum {
+	BT_MESH_VALID,           /* We have been provisioned */
+	BT_MESH_SUSPENDED,       /* Network is temporarily suspended */
+	BT_MESH_IVU_IN_PROGRESS, /* IV Update in Progress */
+	BT_MESH_IVU_INITIATOR,   /* IV Update initiated by us */
+	BT_MESH_IVU_TEST,        /* IV Update test mode */
+	BT_MESH_IVU_PENDING,     /* Update blocked by SDU in progress */
+
+	/* pending storage actions, must reside within first 32 flags */
 	BT_MESH_RPL_PENDING,
 	BT_MESH_KEYS_PENDING,
 	BT_MESH_NET_PENDING,
@@ -206,13 +221,8 @@ enum {
 };
 
 struct bt_mesh_net {
-	u32_t iv_index;          /* Current IV Index */
-	u32_t seq:24,            /* Next outgoing sequence number */
-	      iv_update:1,       /* 1 if IV Update in Progress */
-	      ivu_initiator:1,   /* IV Update initiated by us */
-	      ivu_test:1,        /* IV Update test mode */
-	      pending_update:1,  /* Update blocked by SDU in progress */
-	      valid:1;           /* 0 if unused */
+	u32_t iv_index; /* Current IV Index */
+	u32_t seq;      /* Next outgoing sequence number (24 bits) */
 
 	ATOMIC_DEFINE(flags, BT_MESH_FLAG_COUNT);
 
@@ -265,6 +275,7 @@ struct bt_mesh_net_rx {
 	       local_match:1,  /* Matched a local element */
 	       friend_match:1; /* Matched an LPN we're friends for */
 	s8_t   rssi;
+	u16_t  msg_cache_idx;  /* Index of entry in message cache */
 };
 
 /* Encoding context for Network/Transport data */
@@ -280,7 +291,9 @@ struct bt_mesh_net_tx {
 
 extern struct bt_mesh_net bt_mesh;
 
-#define BT_MESH_NET_IVI_TX (bt_mesh.iv_index - bt_mesh.iv_update)
+#define BT_MESH_NET_IVI_TX (bt_mesh.iv_index - \
+			    atomic_test_bit(bt_mesh.flags, \
+					    BT_MESH_IVU_IN_PROGRESS))
 #define BT_MESH_NET_IVI_RX(rx) (bt_mesh.iv_index - (rx)->old_iv)
 
 #define BT_MESH_NET_HDR_LEN 9
@@ -357,3 +370,19 @@ struct friend_cred *friend_cred_create(struct bt_mesh_subnet *sub, u16_t addr,
 				       u16_t lpn_counter, u16_t frnd_counter);
 void friend_cred_clear(struct friend_cred *cred);
 int friend_cred_del(u16_t net_idx, u16_t addr);
+
+static inline void send_cb_finalize(const struct bt_mesh_send_cb *cb,
+				    void *cb_data)
+{
+	if (!cb) {
+		return;
+	}
+
+	if (cb->start) {
+		cb->start(0, 0, cb_data);
+	}
+
+	if (cb->end) {
+		cb->end(0, cb_data);
+	}
+}

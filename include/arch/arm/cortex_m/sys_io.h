@@ -8,8 +8,8 @@
  * @brief ARM CORTEX-M Series memory mapped register I/O operations
  */
 
-#ifndef _CORTEX_M_SYS_IO_H_
-#define _CORTEX_M_SYS_IO_H_
+#ifndef ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_SYS_IO_H_
+#define ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_SYS_IO_H_
 
 #if !defined(_ASMLANGUAGE)
 
@@ -54,21 +54,21 @@ static inline void sys_set_bit(mem_addr_t addr, unsigned int bit)
 {
 	u32_t temp = *(volatile u32_t *)addr;
 
-	*(volatile u32_t *)addr = temp | (1 << bit);
+	*(volatile u32_t *)addr = temp | BIT(bit);
 }
 
 static inline void sys_clear_bit(mem_addr_t addr, unsigned int bit)
 {
 	u32_t temp = *(volatile u32_t *)addr;
 
-	*(volatile u32_t *)addr = temp & ~(1 << bit);
+	*(volatile u32_t *)addr = temp & ~BIT(bit);
 }
 
 static inline int sys_test_bit(mem_addr_t addr, unsigned int bit)
 {
 	u32_t temp = *(volatile u32_t *)addr;
 
-	return temp & (1 << bit);
+	return temp & BIT(bit);
 }
 
 static ALWAYS_INLINE
@@ -94,4 +94,4 @@ static ALWAYS_INLINE
 
 #endif /* !_ASMLANGUAGE */
 
-#endif /* _CORTEX_M_SYS_IO_H_ */
+#endif /* ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_SYS_IO_H_ */

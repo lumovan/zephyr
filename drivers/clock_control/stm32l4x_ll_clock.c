@@ -17,11 +17,11 @@
 #ifdef CONFIG_CLOCK_STM32_SYSCLK_SRC_PLL
 
 /* Macros to fill up division factors values */
-#define _pllm(v) LL_RCC_PLLM_DIV_ ## v
-#define pllm(v) _pllm(v)
+#define z_pllm(v) LL_RCC_PLLM_DIV_ ## v
+#define pllm(v) z_pllm(v)
 
-#define _pllr(v) LL_RCC_PLLR_DIV_ ## v
-#define pllr(v) _pllr(v)
+#define z_pllr(v) LL_RCC_PLLR_DIV_ ## v
+#define pllr(v) z_pllr(v)
 
 /**
  * @brief fill in pll configuration structure
@@ -39,5 +39,24 @@ void config_pll_init(LL_UTILS_PLLInitTypeDef *pllinit)
  */
 void config_enable_default_clocks(void)
 {
-	/* Nothing for now */
+#ifdef CONFIG_CLOCK_STM32_LSE
+	/* LSE belongs to the back-up domain, enable access.*/
+
+	/* Enable the power interface clock */
+	LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+
+	/* Set the DBP bit in the Power control register 1 (PWR_CR1) */
+	LL_PWR_EnableBkUpAccess();
+	while (!LL_PWR_IsEnabledBkUpAccess()) {
+		/* Wait for Backup domain access */
+	}
+
+	/* Enable LSE Oscillator (32.768 kHz) */
+	LL_RCC_LSE_Enable();
+	while (!LL_RCC_LSE_IsReady()) {
+		/* Wait for LSE ready */
+	}
+
+	LL_PWR_DisableBkUpAccess();
+#endif
 }

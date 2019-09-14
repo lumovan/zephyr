@@ -1,0 +1,4 @@
+# Kconfig - Texas Instruments Tivaware Family
+#
+
+source "soc/arm/ti_tivaware/*/Kconfig.series"

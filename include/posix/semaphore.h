@@ -3,15 +3,15 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef _POSIX_SEMAPHORE_H
-#define _POSIX_SEMAPHORE_H
+#ifndef ZEPHYR_INCLUDE_POSIX_SEMAPHORE_H_
+#define ZEPHYR_INCLUDE_POSIX_SEMAPHORE_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include <posix/time.h>
-#include "sys/types.h"
+#include "posix_types.h"
 
 int sem_destroy(sem_t *semaphore);
 int sem_getvalue(sem_t *restrict semaphore, int *restrict value);
@@ -25,4 +25,4 @@ int sem_wait(sem_t *semaphore);
 }
 #endif
 
-#endif /* POSIX_SEMAPHORE_H */
+#endif /* ZEPHYR_INCLUDE_POSIX_SEMAPHORE_H_ */

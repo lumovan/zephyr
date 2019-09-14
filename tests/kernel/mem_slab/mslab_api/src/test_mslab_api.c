@@ -17,7 +17,7 @@ void tmslab_alloc_free(void *data)
 	struct k_mem_slab *pslab = (struct k_mem_slab *)data;
 	void *block[BLK_NUM];
 
-	memset(block, 0, sizeof(block));
+	(void)memset(block, 0, sizeof(block));
 	/**
 	 * TESTPOINT: The memory slab's buffer contains @a slab_num_blocks
 	 * memory blocks that are @a slab_block_size bytes long.
@@ -51,7 +51,7 @@ static void tmslab_alloc_align(void *data)
 		 * TESTPOINT: To ensure that each memory block is similarly
 		 * aligned to this boundary
 		 */
-		zassert_true((u32_t)block[i] % BLK_ALIGN == 0, NULL);
+		zassert_true((u32_t)block[i] % BLK_ALIGN == 0U, NULL);
 	}
 	for (int i = 0; i < BLK_NUM; i++) {
 		k_mem_slab_free(pslab, &block[i]);

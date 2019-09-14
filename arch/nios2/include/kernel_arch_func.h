@@ -17,8 +17,8 @@
  * symbols" in the offsets.o module.
  */
 
-#ifndef _kernel_arch_func__h_
-#define _kernel_arch_func__h_
+#ifndef ZEPHYR_ARCH_NIOS2_INCLUDE_KERNEL_ARCH_FUNC_H_
+#define ZEPHYR_ARCH_NIOS2_INCLUDE_KERNEL_ARCH_FUNC_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,38 +32,33 @@ void k_cpu_atomic_idle(unsigned int key);
 static ALWAYS_INLINE void kernel_arch_init(void)
 {
 	_kernel.irq_stack =
-		K_THREAD_STACK_BUFFER(_interrupt_stack) + CONFIG_ISR_STACK_SIZE;
+		Z_THREAD_STACK_BUFFER(_interrupt_stack) + CONFIG_ISR_STACK_SIZE;
 }
 
 static ALWAYS_INLINE void
-_set_thread_return_value(struct k_thread *thread, unsigned int value)
+z_set_thread_return_value(struct k_thread *thread, unsigned int value)
 {
 	thread->callee_saved.retval = value;
 }
 
-static inline void _IntLibInit(void)
-{
-	/* No special initialization of the interrupt subsystem required */
-}
-
-#define _is_in_isr() (_kernel.nested != 0)
+#define z_is_in_isr() (_kernel.nested != 0U)
 
 #ifdef CONFIG_IRQ_OFFLOAD
-void _irq_do_offload(void);
+void z_irq_do_offload(void);
 #endif
 
 #if ALT_CPU_ICACHE_SIZE > 0
-void _nios2_icache_flush_all(void);
+void z_nios2_icache_flush_all(void);
 #else
-#define _nios2_icache_flush_all() do { } while (0)
+#define z_nios2_icache_flush_all() do { } while (0)
 #endif
 
 #if ALT_CPU_DCACHE_SIZE > 0
-void _nios2_dcache_flush_all(void);
-void _nios2_dcache_flush_no_writeback(void *start, u32_t len);
+void z_nios2_dcache_flush_all(void);
+void z_nios2_dcache_flush_no_writeback(void *start, u32_t len);
 #else
-#define _nios2_dcache_flush_all() do { } while (0)
-#define _nios2_dcache_flush_no_writeback(x, y) do { } while (0)
+#define z_nios2_dcache_flush_all() do { } while (0)
+#define z_nios2_dcache_flush_no_writeback(x, y) do { } while (0)
 #endif
 
 #endif /* _ASMLANGUAGE */
@@ -72,4 +67,4 @@ void _nios2_dcache_flush_no_writeback(void *start, u32_t len);
 }
 #endif
 
-#endif /* _kernel_arch_func__h_ */
+#endif /* ZEPHYR_ARCH_NIOS2_INCLUDE_KERNEL_ARCH_FUNC_H_ */

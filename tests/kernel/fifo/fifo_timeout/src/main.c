@@ -76,7 +76,7 @@ struct timeout_order_data timeout_order_data_mult_fifo[] = {
 };
 
 #define TIMEOUT_ORDER_NUM_THREADS	ARRAY_SIZE(timeout_order_data_mult_fifo)
-#define TSTACK_SIZE			1024
+#define TSTACK_SIZE			(1024 + CONFIG_TEST_EXTRA_STACKSIZE)
 #define FIFO_THREAD_PRIO		-5
 
 static K_THREAD_STACK_ARRAY_DEFINE(ttstack,
@@ -124,6 +124,8 @@ static void test_thread_pend_and_timeout(void *p1, void *p2, void *p3)
 	u32_t start_time;
 	void *packet;
 
+	k_sleep(1); /* Align to ticks */
+
 	start_time = k_cycle_get_32();
 	packet = k_fifo_get(d->fifo, d->timeout);
 	zassert_true(packet == NULL, NULL);
@@ -135,7 +137,8 @@ static void test_thread_pend_and_timeout(void *p1, void *p2, void *p3)
 static int test_multiple_threads_pending(struct timeout_order_data *test_data,
 					 int test_data_size)
 {
-	int ii;
+	int ii, j;
+	u32_t diff_ms;
 
 	for (ii = 0; ii < test_data_size; ii++) {
 		tid[ii] = k_thread_create(&ttdata[ii], ttstack[ii], TSTACK_SIZE,
@@ -144,6 +147,14 @@ static int test_multiple_threads_pending(struct timeout_order_data *test_data,
 				FIFO_THREAD_PRIO, K_INHERIT_PERMS, 0);
 	}
 
+	/* In general, there is no guarantee of wakeup order when multiple
+	 * threads are woken up on the same tick. This can especially happen
+	 * when the system is loaded. However, in this particular test, we
+	 * are controlling the system state and hence we can make a reasonable
+	 * estimation of a timeout occurring with the max deviation of an
+	 * additional tick. Hence the timeout order may slightly be different
+	 * from what we normally expect.
+	 */
 	for (ii = 0; ii < test_data_size; ii++) {
 		struct timeout_order_data *data =
 			k_fifo_get(&timeout_order_fifo, K_FOREVER);
@@ -152,9 +163,31 @@ static int test_multiple_threads_pending(struct timeout_order_data *test_data,
 			TC_PRINT(" thread (q order: %d, t/o: %d, fifo %p)\n",
 				data->q_order, data->timeout, data->fifo);
 		} else {
-			TC_ERROR(" *** thread %d woke up, expected %d\n",
-						data->timeout_order, ii);
-			return TC_FAIL;
+			/* Get the index of the thread which should have
+			 * actually timed out.
+			 */
+			for (j = 0; j < test_data_size; j++) {
+				if (test_data[j].timeout_order == ii) {
+					break;
+				}
+			}
+
+			if (data->timeout > test_data[j].timeout) {
+				diff_ms = data->timeout - test_data[j].timeout;
+			} else {
+				diff_ms = test_data[j].timeout - data->timeout;
+			}
+
+			if (z_ms_to_ticks(diff_ms) == 1) {
+				TC_PRINT(
+				" thread (q order: %d, t/o: %d, fifo %p)\n",
+				data->q_order, data->timeout, data->fifo);
+			} else {
+				TC_ERROR(
+				" *** thread %d woke up, expected %d\n",
+				data->timeout_order, ii);
+				return TC_FAIL;
+			}
 		}
 	}
 
@@ -267,8 +300,10 @@ static void test_timeout_empty_fifo(void)
 	void *packet;
 	u32_t start_time, timeout;
 
+	k_sleep(1); /* Align to ticks */
+
 	/* Test empty fifo with timeout */
-	timeout = 10;
+	timeout = 10U;
 	start_time = k_cycle_get_32();
 	packet = k_fifo_get(&fifo_timeout[0], timeout);
 	zassert_true(packet == NULL, NULL);
@@ -318,11 +353,13 @@ static void test_timeout_fifo_thread(void)
 	struct reply_packet reply_packet;
 	u32_t start_time, timeout;
 
+	k_sleep(1); /* Align to ticks */
+
 	/*
 	 * Test fifo with some timeout and child thread that puts
 	 * data on the fifo on time
 	 */
-	timeout = 10;
+	timeout = 10U;
 	start_time = k_cycle_get_32();
 
 	tid[0] = k_thread_create(&ttdata[0], ttstack[0], TSTACK_SIZE,

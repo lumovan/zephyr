@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __PTHREAD_H__
-#define __PTHREAD_H__
+#ifndef ZEPHYR_INCLUDE_POSIX_PTHREAD_H_
+#define ZEPHYR_INCLUDE_POSIX_PTHREAD_H_
 
 #include <kernel.h>
 #include <wait_q.h>
 #include <posix/time.h>
 #include <posix/unistd.h>
-#include "sys/types.h"
+#include "posix_types.h"
 #include "posix_sched.h"
 #include <posix/pthread_key.h>
 #include <stdlib.h>
@@ -54,8 +54,8 @@ struct posix_thread {
 
 /* Pthread cancellation */
 #define _PTHREAD_CANCEL_POS	0
-#define PTHREAD_CANCEL_ENABLE	(0 << _PTHREAD_CANCEL_POS)
-#define PTHREAD_CANCEL_DISABLE	(1 << _PTHREAD_CANCEL_POS)
+#define PTHREAD_CANCEL_ENABLE	(0U << _PTHREAD_CANCEL_POS)
+#define PTHREAD_CANCEL_DISABLE	BIT(_PTHREAD_CANCEL_POS)
 
 /* Passed to pthread_once */
 #define PTHREAD_ONCE_INIT 1
@@ -71,7 +71,7 @@ struct posix_thread {
  */
 #define PTHREAD_COND_DEFINE(name)					\
 	struct pthread_cond name = {					\
-		.wait_q = _WAIT_Q_INIT(&name.wait_q),			\
+		.wait_q = Z_WAIT_Q_INIT(&name.wait_q),			\
 	}
 
 /**
@@ -83,7 +83,7 @@ static inline int pthread_cond_init(pthread_cond_t *cv,
 				    const pthread_condattr_t *att)
 {
 	ARG_UNUSED(att);
-	_waitq_init(&cv->wait_q);
+	z_waitq_init(&cv->wait_q);
 	return 0;
 }
 
@@ -160,11 +160,10 @@ static inline int pthread_condattr_destroy(pthread_condattr_t *att)
  * @param name Symbol name of the mutex
  */
 #define PTHREAD_MUTEX_DEFINE(name) \
-	struct pthread_mutex name \
-		__in_section(_k_mutex, static, name) = \
+	struct pthread_mutex name = \
 	{ \
 		.lock_count = 0, \
-		.wait_q = _WAIT_Q_INIT(&name.wait_q),	\
+		.wait_q = Z_WAIT_Q_INIT(&name.wait_q),	\
 		.owner = NULL, \
 	}
 
@@ -330,9 +329,11 @@ static inline int pthread_mutexattr_destroy(pthread_mutexattr_t *m)
  */
 #define PTHREAD_BARRIER_DEFINE(name, count)			\
 	struct pthread_barrier name = {				\
-		.wait_q = _WAIT_Q_INIT(&name.wait_q),		\
+		.wait_q = Z_WAIT_Q_INIT(&name.wait_q),		\
 		.max = count,					\
 	}
+
+#define PTHREAD_BARRIER_SERIAL_THREAD 1
 
 /**
  * @brief POSIX threading compatibility API
@@ -354,7 +355,7 @@ static inline int pthread_barrier_init(pthread_barrier_t *b,
 
 	b->max = count;
 	b->count = 0;
-	_waitq_init(&b->wait_q);
+	z_waitq_init(&b->wait_q);
 
 	return 0;
 }
@@ -517,4 +518,4 @@ int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, const void *value);
 void *pthread_getspecific(pthread_key_t key);
 
-#endif /* __PTHREAD_H__ */
+#endif /* ZEPHYR_INCLUDE_POSIX_PTHREAD_H_ */

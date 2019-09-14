@@ -17,6 +17,10 @@
 #include <misc/byteorder.h>
 #include <net/buf.h>
 
+#include <logging/log.h>
+#define LOG_MODULE_NAME bttester_gap
+LOG_MODULE_REGISTER(LOG_MODULE_NAME);
+
 #include "bttester.h"
 
 #define CONTROLLER_INDEX 0
@@ -31,14 +35,19 @@ struct bt_conn_auth_cb cb;
 static void le_connected(struct bt_conn *conn, u8_t err)
 {
 	struct gap_device_connected_ev ev;
-	const bt_addr_le_t *addr = bt_conn_get_dst(conn);
+	struct bt_conn_info info;
 
 	if (err) {
 		return;
 	}
 
-	memcpy(ev.address, addr->a.val, sizeof(ev.address));
-	ev.address_type = addr->type;
+	bt_conn_get_info(conn, &info);
+
+	memcpy(ev.address, info.le.dst->a.val, sizeof(ev.address));
+	ev.address_type = info.le.dst->type;
+	ev.interval = sys_cpu_to_le16(info.le.interval);
+	ev.latency = sys_cpu_to_le16(info.le.latency);
+	ev.timeout = sys_cpu_to_le16(info.le.timeout);
 
 	tester_send(BTP_SERVICE_ID_GAP, GAP_EV_DEVICE_CONNECTED,
 		    CONTROLLER_INDEX, (u8_t *) &ev, sizeof(ev));
@@ -72,10 +81,27 @@ static void le_identity_resolved(struct bt_conn *conn, const bt_addr_le_t *rpa,
 		    CONTROLLER_INDEX, (u8_t *) &ev, sizeof(ev));
 }
 
+static void le_param_updated(struct bt_conn *conn, u16_t interval,
+			     u16_t latency, u16_t timeout)
+{
+	struct gap_conn_param_update_ev ev;
+	const bt_addr_le_t *addr = bt_conn_get_dst(conn);
+
+	memcpy(ev.address, addr->a.val, sizeof(ev.address));
+	ev.address_type = addr->type;
+	ev.interval = sys_cpu_to_le16(interval);
+	ev.latency = sys_cpu_to_le16(latency);
+	ev.timeout = sys_cpu_to_le16(timeout);
+
+	tester_send(BTP_SERVICE_ID_GAP, GAP_EV_CONN_PARAM_UPDATE,
+		    CONTROLLER_INDEX, (u8_t *) &ev, sizeof(ev));
+}
+
 static struct bt_conn_cb conn_callbacks = {
 	.connected = le_connected,
 	.disconnected = le_disconnected,
 	.identity_resolved = le_identity_resolved,
+	.le_param_updated = le_param_updated,
 };
 
 static void supported_commands(u8_t *data, u16_t len)
@@ -83,7 +109,7 @@ static void supported_commands(u8_t *data, u16_t len)
 	u8_t cmds[3];
 	struct gap_read_supported_commands_rp *rp = (void *) &cmds;
 
-	memset(cmds, 0, sizeof(cmds));
+	(void)memset(cmds, 0, sizeof(cmds));
 
 	tester_set_bit(cmds, GAP_READ_SUPPORTED_COMMANDS);
 	tester_set_bit(cmds, GAP_READ_CONTROLLER_INDEX_LIST);
@@ -99,6 +125,7 @@ static void supported_commands(u8_t *data, u16_t len)
 	tester_set_bit(cmds, GAP_SET_IO_CAP);
 	tester_set_bit(cmds, GAP_PAIR);
 	tester_set_bit(cmds, GAP_PASSKEY_ENTRY);
+	tester_set_bit(cmds, GAP_CONN_PARAM_UPDATE);
 
 	tester_send(BTP_SERVICE_ID_GAP, GAP_READ_SUPPORTED_COMMANDS,
 		    CONTROLLER_INDEX, (u8_t *) rp, sizeof(cmds));
@@ -111,7 +138,7 @@ static void controller_index_list(u8_t *data,  u16_t len)
 
 	rp = (void *) buf;
 
-	rp->num = 1;
+	rp->num = 1U;
 	rp->index[0] = CONTROLLER_INDEX;
 
 	tester_send(BTP_SERVICE_ID_GAP, GAP_READ_CONTROLLER_INDEX_LIST,
@@ -124,7 +151,7 @@ static void controller_info(u8_t *data, u16_t len)
 	struct bt_le_oob oob;
 	u32_t supported_settings;
 
-	memset(&rp, 0, sizeof(rp));
+	(void)memset(&rp, 0, sizeof(rp));
 
 	bt_le_oob_get_local(BT_ID_DEFAULT, &oob);
 	memcpy(rp.address, &oob.addr.a, sizeof(bt_addr_t));
@@ -216,9 +243,9 @@ static void start_advertising(const u8_t *data, u16_t len)
 	bool adv_conn;
 	int i;
 
-	for (i = 0, adv_len = 1; i < cmd->adv_data_len; adv_len++) {
+	for (i = 0, adv_len = 1U; i < cmd->adv_data_len; adv_len++) {
 		if (adv_len >= ARRAY_SIZE(ad)) {
-			SYS_LOG_ERR("ad[] Out of memory");
+			LOG_ERR("ad[] Out of memory");
 			goto fail;
 		}
 
@@ -228,9 +255,9 @@ static void start_advertising(const u8_t *data, u16_t len)
 		i += ad[adv_len].data_len;
 	}
 
-	for (i = 0, sd_len = 0; i < cmd->scan_rsp_len; sd_len++) {
+	for (i = 0, sd_len = 0U; i < cmd->scan_rsp_len; sd_len++) {
 		if (sd_len >= ARRAY_SIZE(sd)) {
-			SYS_LOG_ERR("sd[] Out of memory");
+			LOG_ERR("sd[] Out of memory");
 			goto fail;
 		}
 
@@ -245,7 +272,7 @@ static void start_advertising(const u8_t *data, u16_t len)
 	/* BTP API don't allow to set empty scan response data. */
 	if (bt_le_adv_start(adv_conn ? BT_LE_ADV_CONN : BT_LE_ADV_NCONN,
 			    ad, adv_len, sd_len ? sd : NULL, sd_len) < 0) {
-		SYS_LOG_ERR("Failed to start advertising");
+		LOG_ERR("Failed to start advertising");
 		goto fail;
 	}
 
@@ -282,7 +309,7 @@ static u8_t get_ad_flags(struct net_buf_simple *ad)
 	u8_t len, i;
 
 	/* Parse advertisement to get flags */
-	for (i = 0; i < ad->len; i += len - 1) {
+	for (i = 0U; i < ad->len; i += len - 1) {
 		len = ad->data[i++];
 		if (!len) {
 			break;
@@ -335,14 +362,14 @@ static void device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
 
 		/* ignore non-discoverable devices */
 		if (!(flags & BT_LE_AD_DISCOV_MASK)) {
-			SYS_LOG_DBG("Non discoverable, skipping");
+			LOG_DBG("Non discoverable, skipping");
 			return;
 		}
 
 		/* if Limited Discovery - ignore general discoverable devices */
 		if ((discovery_flags & GAP_DISCOVERY_FLAG_LIMITED) &&
 		    !(flags & BT_LE_AD_LIMITED)) {
-			SYS_LOG_DBG("General discoverable, skipping");
+			LOG_DBG("General discoverable, skipping");
 			return;
 		}
 	}
@@ -354,7 +381,7 @@ static void device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
 
 		/* skip if there is no pending advertisement */
 		if (!adv_buf->len) {
-			SYS_LOG_INF("No pending advertisement, skipping");
+			LOG_INF("No pending advertisement, skipping");
 			return;
 		}
 
@@ -368,7 +395,7 @@ static void device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
 		 * this one
 		 */
 		if (bt_addr_le_cmp(addr, &a)) {
-			SYS_LOG_INF("Address does not match, skipping");
+			LOG_INF("Address does not match, skipping");
 			goto done;
 		}
 
@@ -394,7 +421,7 @@ static void device_found(const bt_addr_le_t *addr, s8_t rssi, u8_t evtype,
 	/* if Active Scan and scannable event - wait for Scan Response */
 	if ((discovery_flags & GAP_DISCOVERY_FLAG_LE_ACTIVE_SCAN) &&
 	    (evtype == BT_LE_ADV_IND || evtype == BT_LE_ADV_SCAN_IND)) {
-		SYS_LOG_DBG("Waiting for scan response");
+		LOG_DBG("Waiting for scan response");
 		return;
 	}
 done:
@@ -520,7 +547,7 @@ static void set_io_cap(const u8_t *data, u16_t len)
 	u8_t status;
 
 	/* Reset io cap requirements */
-	memset(&cb, 0, sizeof(cb));
+	(void)memset(&cb, 0, sizeof(cb));
 	bt_conn_auth_cb_register(NULL);
 
 	switch (cmd->io_cap) {
@@ -636,6 +663,34 @@ rsp:
 		   status);
 }
 
+static void conn_param_update(const u8_t *data, u16_t len)
+{
+	const struct gap_conn_param_update_cmd *cmd = (void *) data;
+	struct bt_le_conn_param param = {
+		.interval_min = sys_le16_to_cpu(cmd->interval_min),
+		.interval_max = sys_le16_to_cpu(cmd->interval_max),
+		.latency = sys_le16_to_cpu(cmd->latency),
+		.timeout = sys_le16_to_cpu(cmd->timeout),
+	};
+	struct bt_conn *conn;
+	u8_t status = BTP_STATUS_FAILED;
+
+	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, (bt_addr_le_t *)data);
+	if (!conn) {
+		goto rsp;
+	}
+
+	if (!bt_conn_le_param_update(conn, &param)) {
+		status = BTP_STATUS_SUCCESS;
+	}
+
+	bt_conn_unref(conn);
+
+rsp:
+	tester_rsp(BTP_SERVICE_ID_GAP, GAP_PASSKEY_ENTRY, CONTROLLER_INDEX,
+		   status);
+}
+
 void tester_handle_gap(u8_t opcode, u8_t index, u8_t *data,
 		       u16_t len)
 {
@@ -702,6 +757,9 @@ void tester_handle_gap(u8_t opcode, u8_t index, u8_t *data,
 		return;
 	case GAP_PASSKEY_ENTRY:
 		passkey_entry(data, len);
+		return;
+	case GAP_CONN_PARAM_UPDATE:
+		conn_param_update(data, len);
 		return;
 	default:
 		tester_rsp(BTP_SERVICE_ID_GAP, opcode, index,

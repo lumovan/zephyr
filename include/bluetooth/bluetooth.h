@@ -8,8 +8,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_BLUETOOTH_H
-#define __BT_BLUETOOTH_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_BLUETOOTH_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_BLUETOOTH_H_
 
 /**
  * @brief Bluetooth APIs
@@ -29,6 +29,13 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Generic Access Profile
+ * @defgroup bt_gap Generic Access Profile
+ * @ingroup bluetooth
+ * @{
+ */
+
 /** @def BT_ID_DEFAULT
  *
  *  Convenience macro for specifying the default identity. This helps
@@ -36,13 +43,6 @@ extern "C" {
  *  supported.
  */
 #define BT_ID_DEFAULT 0
-
-/**
- * @brief Generic Access Profile
- * @defgroup bt_gap Generic Access Profile
- * @ingroup bluetooth
- * @{
- */
 
 /**
  * @typedef bt_ready_cb_t
@@ -271,6 +271,23 @@ enum {
 
 	/* Advertise using GAP device name */
 	BT_LE_ADV_OPT_USE_NAME = BIT(3),
+
+	/** Use low duty directed advertising mode, otherwise high duty mode
+	 *  will be used. This option is only effective when used with
+	 *  bt_conn_create_slave_le().
+	 */
+	BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY = BIT(4),
+
+	/** Enable use of Resolvable Private Address (RPA) as the target address
+	 *  in directed advertisements when CONFIG_BT_PRIVACY is not enabled.
+	 *  This is required if the remote device is privacy-enabled and
+	 *  supports address resolution of the target address in directed
+	 *  advertisement.
+	 *  It is the responsibility of the application to check that the remote
+	 *  device supports address resolution of directed advertisements by
+	 *  reading its Central Address Resolution characteristic.
+	 */
+	BT_LE_ADV_OPT_DIR_ADDR_RPA = BIT(5),
 };
 
 /** LE Advertising Parameters. */
@@ -310,6 +327,14 @@ struct bt_le_adv_param {
 					    BT_GAP_ADV_FAST_INT_MIN_2, \
 					    BT_GAP_ADV_FAST_INT_MAX_2)
 
+#define BT_LE_ADV_CONN_DIR_LOW_DUTY \
+	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE | BT_LE_ADV_OPT_ONE_TIME | \
+			BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY, \
+			BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2)
+
+#define BT_LE_ADV_CONN_DIR BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE | \
+					   BT_LE_ADV_OPT_ONE_TIME, 0, 0)
+
 #define BT_LE_ADV_NCONN BT_LE_ADV_PARAM(0, BT_GAP_ADV_FAST_INT_MIN_2, \
 					BT_GAP_ADV_FAST_INT_MAX_2)
 
@@ -329,10 +354,29 @@ struct bt_le_adv_param {
  *  @param sd_len Number of elements in sd
  *
  *  @return Zero on success or (negative) error code otherwise.
+ *  @return -ECONNREFUSED When connectable advertising is requested and there
+ *			  is already maximum number of connections established.
+ *			  This error code is only guaranteed when using Zephyr
+ *			  controller, for other controllers code returned in
+ *			  this case may be -EIO.
  */
 int bt_le_adv_start(const struct bt_le_adv_param *param,
 		    const struct bt_data *ad, size_t ad_len,
 		    const struct bt_data *sd, size_t sd_len);
+
+/** @brief Update advertising
+ *
+ *  Update advertisement and scan response data.
+ *
+ *  @param ad Data to be used in advertisement packets.
+ *  @param ad_len Number of elements in ad
+ *  @param sd Data to be used in scan response packets.
+ *  @param sd_len Number of elements in sd
+ *
+ *  @return Zero on success or (negative) error code otherwise.
+ */
+int bt_le_adv_update_data(const struct bt_data *ad, size_t ad_len,
+			  const struct bt_data *sd, size_t sd_len);
 
 /** @brief Stop advertising
  *
@@ -351,7 +395,7 @@ int bt_le_adv_stop(void);
  *  @param addr Advertiser LE address and type.
  *  @param rssi Strength of advertiser signal.
  *  @param adv_type Type of advertising response from advertiser.
- *  @param data Buffer containing advertiser data.
+ *  @param buf Buffer containing advertiser data.
  */
 typedef void bt_le_scan_cb_t(const bt_addr_le_t *addr, s8_t rssi,
 			     u8_t adv_type, struct net_buf_simple *buf);
@@ -425,6 +469,16 @@ int bt_le_scan_start(const struct bt_le_scan_param *param, bt_le_scan_cb_t cb);
  *  of protocol error or negative (POSIX) in case of stack internal error
  */
 int bt_le_scan_stop(void);
+
+
+/** @brief Set (LE) channel map.
+ *
+ * @param chan_map Channel map.
+ *
+ *  @return Zero on success or error code otherwise, positive in case
+ *  of protocol error or negative (POSIX) in case of stack internal error
+ */
+int bt_le_set_chan_map(u8_t chan_map[5]);
 
 /** @brief Helper for parsing advertising (or EIR or OOB) data.
  *
@@ -664,6 +718,22 @@ int bt_br_set_connectable(bool enable);
   */
 int bt_unpair(u8_t id, const bt_addr_le_t *addr);
 
+/** Information about a bond with a remote device. */
+struct bt_bond_info {
+	/** Address of the remote device. */
+	bt_addr_le_t addr;
+};
+
+/** Iterate through all existing bonds.
+  *
+  * @param id         Local identity (mostly just BT_ID_DEFAULT).
+  * @param func       Function to call for each bond.
+  * @param user_data  Data to pass to the callback function.
+  */
+void bt_foreach_bond(u8_t id, void (*func)(const struct bt_bond_info *info,
+					   void *user_data),
+		     void *user_data);
+
 /**
  * @}
  */
@@ -675,4 +745,4 @@ int bt_unpair(u8_t id, const bt_addr_le_t *addr);
  * @}
  */
 
-#endif /* __BT_BLUETOOTH_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_BLUETOOTH_H_ */

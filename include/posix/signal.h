@@ -3,14 +3,14 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __POSIX_SIGNAL_H__
-#define __POSIX_SIGNAL_H__
+#ifndef ZEPHYR_INCLUDE_POSIX_SIGNAL_H_
+#define ZEPHYR_INCLUDE_POSIX_SIGNAL_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "sys/types.h"
+#include "posix_types.h"
 
 #ifndef SIGEV_NONE
 #define SIGEV_NONE 1
@@ -34,11 +34,13 @@ typedef struct sigevent {
 	int sigev_signo;
 	sigval sigev_value;
 	void (*sigev_notify_function)(sigval val);
+	#ifdef CONFIG_PTHREAD_IPC
 	pthread_attr_t *sigev_notify_attributes;
+	#endif
 } sigevent;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __POSIX_TIME_H__ */
+#endif /* POSIX__SIGNAL_H */

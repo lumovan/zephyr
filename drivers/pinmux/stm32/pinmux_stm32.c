@@ -23,6 +23,10 @@
 
 #include "pinmux.h"
 
+#define GPIO_REG_SIZE         0x400
+/* base address for where GPIO registers start */
+#define GPIO_PORTS_BASE       (GPIOA_BASE)
+
 static const u32_t ports_enable[STM32_PORTS_MAX] = {
 	STM32_PERIPH_GPIOA,
 	STM32_PERIPH_GPIOB,
@@ -49,6 +53,21 @@ static const u32_t ports_enable[STM32_PORTS_MAX] = {
 #endif
 #ifdef GPIOH_BASE
 	STM32_PERIPH_GPIOH,
+#else
+	STM32_PORT_NOT_AVAILABLE,
+#endif
+#ifdef GPIOI_BASE
+	STM32_PERIPH_GPIOI,
+#else
+	STM32_PORT_NOT_AVAILABLE,
+#endif
+#ifdef GPIOJ_BASE
+	STM32_PERIPH_GPIOJ,
+#else
+	STM32_PORT_NOT_AVAILABLE,
+#endif
+#ifdef GPIOK_BASE
+	STM32_PERIPH_GPIOK,
 #else
 	STM32_PORT_NOT_AVAILABLE,
 #endif
@@ -90,7 +109,7 @@ static int stm32_pin_configure(int pin, int func, int altf)
 	/* not much here, on STM32F10x the alternate function is
 	 * controller by setting up GPIO pins in specific mode.
 	 */
-	return stm32_gpio_configure((u32_t *)port_base,
+	return gpio_stm32_configure((u32_t *)port_base,
 				    STM32_PIN(pin), func, altf);
 }
 
@@ -103,7 +122,7 @@ static int stm32_pin_configure(int pin, int func, int altf)
  *
  * @return 0 on success, error otherwise
  */
-int _pinmux_stm32_set(u32_t pin, u32_t func,
+int z_pinmux_stm32_set(u32_t pin, u32_t func,
 				struct device *clk)
 {
 	/* make sure to enable port clock first */
@@ -129,7 +148,7 @@ void stm32_setup_pins(const struct pin_config *pinconf,
 	clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
 
 	for (i = 0; i < pins; i++) {
-		_pinmux_stm32_set(pinconf[i].pin_num,
+		z_pinmux_stm32_set(pinconf[i].pin_num,
 				  pinconf[i].mode,
 				  clk);
 	}

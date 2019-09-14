@@ -10,19 +10,29 @@
 #include <errno.h>
 #include <misc/mempool.h>
 #include <string.h>
-#include <logging/sys_log.h>
+#include <app_memory/app_memdomain.h>
+
+#define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
+#include <logging/log.h>
+LOG_MODULE_DECLARE(os);
 
 #if (CONFIG_MINIMAL_LIBC_MALLOC_ARENA_SIZE > 0)
-K_MUTEX_DEFINE(malloc_mutex);
-SYS_MEM_POOL_DEFINE(z_malloc_mem_pool, &malloc_mutex, 16,
-		    CONFIG_MINIMAL_LIBC_MALLOC_ARENA_SIZE, 1, 4, .data);
+#ifdef CONFIG_USERSPACE
+K_APPMEM_PARTITION_DEFINE(z_malloc_partition);
+#define POOL_SECTION K_APP_DMEM_SECTION(z_malloc_partition)
+#else
+#define POOL_SECTION .data
+#endif /* CONFIG_USERSPACE */
+
+SYS_MEM_POOL_DEFINE(z_malloc_mem_pool, NULL, 16,
+		    CONFIG_MINIMAL_LIBC_MALLOC_ARENA_SIZE, 1, 4, POOL_SECTION);
 
 void *malloc(size_t size)
 {
 	void *ret;
 
 	ret = sys_mem_pool_alloc(&z_malloc_mem_pool, size);
-	if (!ret) {
+	if (ret == NULL) {
 		errno = ENOMEM;
 	}
 
@@ -33,9 +43,6 @@ static int malloc_prepare(struct device *unused)
 {
 	ARG_UNUSED(unused);
 
-#ifdef CONFIG_USERSPACE
-	k_object_access_all_grant(&malloc_mutex);
-#endif
 	sys_mem_pool_init(&z_malloc_mem_pool);
 
 	return 0;
@@ -47,7 +54,7 @@ void *malloc(size_t size)
 {
 	ARG_UNUSED(size);
 
-	SYS_LOG_DBG("CONFIG_MINIMAL_LIBC_MALLOC_ARENA_SIZE is 0\n");
+	LOG_DBG("CONFIG_MINIMAL_LIBC_MALLOC_ARENA_SIZE is 0");
 	errno = ENOMEM;
 
 	return NULL;
@@ -82,8 +89,8 @@ void *calloc(size_t nmemb, size_t size)
 
 	ret = malloc(size);
 
-	if (ret) {
-		memset(ret, 0, size);
+	if (ret != NULL) {
+		(void)memset(ret, 0, size);
 	}
 
 	return ret;
@@ -95,7 +102,12 @@ void *realloc(void *ptr, size_t requested_size)
 	size_t block_size, total_requested_size;
 	void *new_ptr;
 
+	if (ptr == NULL) {
+		return malloc(requested_size);
+	}
+
 	if (requested_size == 0) {
+		free(ptr);
 		return NULL;
 	}
 
@@ -120,7 +132,7 @@ void *realloc(void *ptr, size_t requested_size)
 	}
 
 	new_ptr = malloc(requested_size);
-	if (!new_ptr) {
+	if (new_ptr == NULL) {
 		return NULL;
 	}
 

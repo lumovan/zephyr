@@ -6,7 +6,7 @@
  */
 
 /dts-v1/;
-#include <nordic/nrf52840.dtsi>
+#include <nordic/nrf52840_qiaa.dtsi>
 
 / {
 	model = "Nordic PCA10059 Dev Kit";
@@ -15,45 +15,53 @@
 
 	chosen {
 		zephyr,console = &uart0;
-#ifdef CONFIG_MCUMGR_SMP_UART
+		zephyr,shell-uart = &uart0;
 		zephyr,uart-mcumgr = &uart0;
-#endif
+		zephyr,bt-mon-uart = &uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
 	};
 
-	led_0 {
+	leds {
 		compatible = "gpio-leds";
-		led0_green: green {
+		led0_green: led_0 {
 			gpios = <&gpio0 6 GPIO_INT_ACTIVE_LOW>;
-			label = "Onboard green LED 0";
+			label = "Green LED 0";
 		};
-	};
-
-	led_1 {
-		compatible = "gpio-leds";
-		led1_red: red {
+		led1_red: led_1 {
 			gpios = <&gpio0 8 GPIO_INT_ACTIVE_LOW>;
-			label = "Onboard red LED 1";
+			label = "Red LED 1";
 		};
-		led1_green: green {
+		led1_green: led_2 {
 			gpios = <&gpio1 9 GPIO_INT_ACTIVE_LOW>;
-			label = "Onboard green LED 1";
+			label = "Green LED 1";
 		};
-		led1_blue: blue {
+		led1_blue: led_3 {
 			gpios = <&gpio0 12 GPIO_INT_ACTIVE_LOW>;
-			label = "Onboard blue LED 1";
+			label = "Blue LED 1";
 		};
 	};
 
-	gpio_keys {
+	buttons {
 		compatible = "gpio-keys";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		user_button_0: button@0 {
-			label = "Push button switch 0";
+		button0: button_0 {
 			gpios = <&gpio1 6 GPIO_PUD_PULL_UP>;
+			label = "Push button switch 0";
 		};
+	};
+
+	/* These aliases are provided for compatibility with samples */
+	aliases {
+		sw0 = &button0;
+		led0 = &led0_green;
+		led1 = &led1_red;
+		led2 = &led1_green;
+		led3 = &led1_blue;
+		led0-green = &led0_green;
+		led1-red   = &led1_red;
+		led1-green = &led1_green;
+		led1-blue  = &led1_blue;
 	};
 };
 
@@ -73,6 +81,10 @@
 	compatible = "nordic,nrf-uarte";
 	current-speed = <115200>;
 	status = "ok";
+	tx-pin = <20>;
+	rx-pin = <24>;
+	rts-pin = <17>;
+	cts-pin = <22>;
 };
 
 &i2c0 {
@@ -82,46 +94,37 @@
 };
 
 &i2c1 {
-	status = "ok";
+	/* Cannot be used together with spi1. */
+	/* status = "ok"; */
 	sda-pin = <30>;
 	scl-pin = <31>;
 };
 
-&flash0 {
-	/*
-	 * For more information, see:
-	 * http://docs.zephyrproject.org/devices/dts/flash_partitions.html
-	 */
-	partitions {
-		compatible = "fixed-partitions";
-		#address-cells = <1>;
-		#size-cells = <1>;
-
-		boot_partition: partition@e0000 {
-			label = "mcuboot";
-			reg = <0x0000e0000 0x0001a000>;
-		};
-		slot0_partition: partition@1000 {
-			label = "image-0";
-			reg = <0x00001000 0x000060000>;
-		};
-		slot1_partition: partition@61000 {
-			label = "image-1";
-			reg = <0x0061000 0x000060000>;
-		};
-		scratch_partition: partition@c1000 {
-			label = "image-scratch";
-			reg = <0x000c1000 0x0001f000>;
-		};
-
-#if defined(CONFIG_FS_FLASH_STORAGE_PARTITION)
-		storage_partition: partition@fa000 {
-			label = "storage";
-			reg = <0x000fa000 0x00004000>;
-		};
-#endif
-	};
+/*
+ * By default, not adding all available SPI instances (spi2, spi3) due to
+ * limited GPIOs available on dongle board.
+ */
+&spi0 {
+	/* Cannot be used together with i2c0. */
+	/* status = "ok"; */
+	sck-pin = <27>;
+	mosi-pin = <26>;
+	miso-pin = <42>;
 };
+
+&spi1 {
+	status = "ok";
+	sck-pin = <31>;
+	mosi-pin = <30>;
+	miso-pin = <45>;
+};
+
+/* Include flash partition table.
+ * Two partition tables are available:
+ * fstab-stock		-compatible with Nordic nRF5 bootloader, default
+ * fstab-debugger	-to use an external debugger, w/o the nRF5 bootloader
+ */
+#include "fstab-stock.dts"
 
 &usbd {
 	compatible = "nordic,nrf-usbd";

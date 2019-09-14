@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _ETH_STM32_HAL_PRIV_H_
-#define _ETH_STM32_HAL_PRIV_H_
+#ifndef ZEPHYR_DRIVERS_ETHERNET_ETH_STM32_HAL_PRIV_H_
+#define ZEPHYR_DRIVERS_ETHERNET_ETH_STM32_HAL_PRIV_H_
 
 #include <kernel.h>
 #include <zephyr/types.h>
 
-#define ETH_STM32_HAL_MTU 1500
+#define ETH_STM32_HAL_MTU NET_ETH_MTU
 #define ETH_STM32_HAL_FRAME_SIZE_MAX (ETH_STM32_HAL_MTU + 18)
 
 /* Definition of the Ethernet driver buffers size and count */
@@ -44,5 +44,5 @@ struct eth_stm32_hal_dev_data {
 #define DEV_DATA(dev) \
 	((struct eth_stm32_hal_dev_data *)(dev)->driver_data)
 
-#endif /* _ETH_STM32_HAL_PRIV_H_ */
+#endif /* ZEPHYR_DRIVERS_ETHERNET_ETH_STM32_HAL_PRIV_H_ */
 

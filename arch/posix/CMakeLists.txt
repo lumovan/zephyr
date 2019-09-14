@@ -1,4 +1,4 @@
-zephyr_cc_option_ifdef(CONFIG_LTO -flto)
+# SPDX-License-Identifier: Apache-2.0
 
 zephyr_compile_options(
   -fno-freestanding
@@ -9,9 +9,12 @@ zephyr_compile_options(
   -include ${ZEPHYR_BASE}/arch/posix/include/posix_cheats.h
   )
 
+zephyr_include_directories(${BOARD_DIR})
+
 zephyr_compile_options_ifdef(CONFIG_COVERAGE
   -fprofile-arcs
   -ftest-coverage
+  -fno-inline
 )
 zephyr_link_libraries_ifdef(CONFIG_COVERAGE
 	-lgcov
@@ -23,7 +26,7 @@ if (CONFIG_ASAN)
 	zephyr_ld_options(-fsanitize=address)
 endif ()
 
-zephyr_compile_definitions(_POSIX_C_SOURCE=200809 _XOPEN_SOURCE _XOPEN_SOURCE_EXTENDED)
+zephyr_compile_definitions(_POSIX_C_SOURCE=200809 _XOPEN_SOURCE=600 _XOPEN_SOURCE_EXTENDED)
 
 zephyr_ld_options(
   -ldl
@@ -40,5 +43,4 @@ zephyr_ld_options(
 # be included in a few zephyr kernel files.
 
 
-add_subdirectory(soc)
 add_subdirectory(core)

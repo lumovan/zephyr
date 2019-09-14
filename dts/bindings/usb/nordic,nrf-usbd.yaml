@@ -5,7 +5,6 @@
 #
 ---
 title: Nordic nRF52 USBD
-id: nordic,nrf-usbd
 version: 0.1
 
 description: >
@@ -34,7 +33,6 @@ properties:
       type: stringlist
       category: optional
       description: readable string describing the interrupts
-      generation: define
 
     num-isoin-endpoints:
       type: int
