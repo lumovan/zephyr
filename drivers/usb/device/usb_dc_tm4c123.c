@@ -36,6 +36,112 @@ struct usb_dc_tm4c123_state {
 	u8_t ep_buf[DT_USB_NUM_BIDIR_ENDPOINTS][EP_MPS];
 };
 
+static int usb_dc_tm4c123_init(void)
+{
+    const tConfigHeader *psHdr;
+    const tConfigDescriptor *psDesc;
+
+    g_ppsDevInfo[0] = psDevice;
+    g_psDCDInst[0].pvCBData = pvDCDCBData;
+
+    USBDCDDeviceInfoInit(ui32Index, psDevice);
+
+    if(g_iUSBMode != eUSBModeOTG)
+    {
+
+        MAP_SysCtlPeripheralReset(SYSCTL_PERIPH_USB0);
+        MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_USB0);
+        MAP_SysCtlUSBPLLEnable();
+
+        if(g_ui32PLLDiv == 0)
+        {
+            USBClockEnable(USB0_BASE, g_ui32PLLDiv, USB_CLOCK_EXTERNAL);
+        }
+        else
+        {
+            USBClockEnable(USB0_BASE, g_ui32PLLDiv, USB_CLOCK_INTERNAL);
+        }
+
+        if(g_ui32ULPISupport != USBLIB_FEATURE_ULPI_NONE)
+        {
+            USBULPIEnable(USB0_BASE);
+
+            if(g_ui32ULPISupport & USBLIB_FEATURE_ULPI_HS)
+            {
+                ULPIConfigSet(USB0_BASE, ULPI_CFG_HS);
+            }
+            else
+            {
+                ULPIConfigSet(USB0_BASE, ULPI_CFG_FS);
+            }
+        }
+        else
+        {
+            USBULPIDisable(USB0_BASE);
+        }
+
+        if(g_iUSBMode == eUSBModeForceDevice)
+        {
+            MAP_USBDevMode(USB0_BASE);
+        }
+        else if(g_iUSBMode == eUSBModeDevice)
+        {
+            MAP_USBOTGMode(USB0_BASE);
+        }
+
+        g_iUSBMode = eUSBModeDevice;
+
+
+        if(g_psDCDInst[0].ui32Features & USBLIB_FEATURE_LPM_EN)
+        {
+            USBDevLPMConfig(USB0_BASE, USB_DEV_LPM_EN);
+            USBLPMIntEnable(USB0_BASE, USB_INTLPM_RESUME | USB_INTLPM_ERROR |
+                                       USB_INTLPM_ACK | USB_INTLPM_NYET);
+            USBDevLPMEnable(USB0_BASE);
+
+            g_psDCDInst[0].ui32LPMState = USBLIB_LPM_STATE_AWAKE;
+        }
+        else
+        {
+            USBDevLPMDisable(USB0_BASE);
+            USBDevLPMConfig(USB0_BASE, USB_DEV_LPM_NONE);
+            g_psDCDInst[0].ui32LPMState = USBLIB_LPM_STATE_DISABLED;
+        }
+    }
+
+    g_psDCDInst[0].psDMAInstance = USBLibDMAInit(0);
+
+    InternalUSBTickInit();
+
+    psHdr = psDevice->ppsConfigDescriptors[
+                                g_psDCDInst[0].ui32DefaultConfiguration - 1];
+    psDesc = (const tConfigDescriptor *)(psHdr->psSections[0]->pui8Data);
+
+    if((psDesc->bmAttributes & USB_CONF_ATTR_PWR_M) == USB_CONF_ATTR_SELF_PWR)
+    {
+        g_psDCDInst[0].ui8Status |= USB_STATUS_SELF_PWR;
+    }
+    else
+    {
+        g_psDCDInst[0].ui8Status &= ~USB_STATUS_SELF_PWR;
+    }
+
+    if(g_iUSBMode != eUSBModeOTG)
+    {
+        MAP_USBIntStatusControl(USB0_BASE);
+        MAP_USBIntStatusEndpoint(USB0_BASE);
+
+        MAP_USBIntEnableControl(USB0_BASE, USB_INTCTRL_RESET |
+                                           USB_INTCTRL_DISCONNECT |
+                                           USB_INTCTRL_RESUME |
+                                           USB_INTCTRL_SUSPEND |
+                                           USB_INTCTRL_SOF);
+        MAP_USBIntEnableEndpoint(USB0_BASE, USB_INTEP_ALL);
+        MAP_USBDevConnect(USB0_BASE);
+        OS_INT_ENABLE(g_psDCDInst[0].ui32IntNum);
+    }
+}
+
 /* Zephyr USB device controller API implementation */
 
 int usb_dc_attach(void)

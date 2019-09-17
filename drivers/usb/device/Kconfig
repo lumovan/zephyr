@@ -56,6 +56,14 @@ config USB_DC_SAM
 	help
 	  SAM family USB HS device controller Driver.
 
+config USB_TM4C123
+	bool "TM4C123 series USB Device Controller driver"
+	depends on SOC_FAMILY_TIVAWARE
+	select USB_DEVICE_DRIVER
+	select HAS_DTS_USB
+	help
+	  TM4C123 family USB device controller Driver.
+
 menuconfig USB_NRF52840
 	bool "Nordic Semiconductor nRF52840 USB Device Controller Driver"
 	default y
