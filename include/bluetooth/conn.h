@@ -20,7 +20,8 @@
 #include <stdbool.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
+#include <bluetooth/hci_err.h>
+#include <bluetooth/addr.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,6 +80,15 @@ struct bt_conn *bt_conn_ref(struct bt_conn *conn);
  */
 void bt_conn_unref(struct bt_conn *conn);
 
+/** @brief Iterate through all existing connections.
+ *
+ * @param type  Connection Type
+ * @param func  Function to call for each connection.
+ * @param data  Data to pass to the callback function.
+ */
+void bt_conn_foreach(int type, void (*func)(struct bt_conn *conn, void *data),
+		     void *data);
+
 /** @brief Look up an existing connection by address.
  *
  *  Look up an existing connection based on the remote address.
@@ -115,11 +125,13 @@ u8_t bt_conn_index(struct bt_conn *conn);
 /** Connection Type */
 enum {
 	/** LE Connection Type */
-	BT_CONN_TYPE_LE,
+	BT_CONN_TYPE_LE = BIT(0),
 	/** BR/EDR Connection Type */
-	BT_CONN_TYPE_BR,
+	BT_CONN_TYPE_BR = BIT(1),
 	/** SCO Connection Type */
-	BT_CONN_TYPE_SCO,
+	BT_CONN_TYPE_SCO = BIT(2),
+	/** All Connection Type */
+	BT_CONN_TYPE_ALL = BT_CONN_TYPE_LE | BT_CONN_TYPE_BR | BT_CONN_TYPE_SCO,
 };
 
 /** LE Connection Info Structure */
@@ -316,12 +328,21 @@ typedef enum __packed {
  *  to achieve due to local or remote device limitation (e.g., input output
  *  capabilities), or if the maximum number of paired devices has been reached.
  *
+ *  This function may return error if the pairing procedure has already been
+ *  initiated by the local device or the peer device.
+ *
  *  @param conn Connection object.
  *  @param sec Requested security level.
  *
  *  @return 0 on success or negative error
  */
 int bt_conn_set_security(struct bt_conn *conn, bt_security_t sec);
+
+/** @brief Get security level for a connection.
+ *
+ *  @return Connection security level
+ */
+bt_security_t bt_conn_get_security(struct bt_conn *conn);
 
 static inline int __deprecated bt_conn_security(struct bt_conn *conn,
 						bt_security_t sec)

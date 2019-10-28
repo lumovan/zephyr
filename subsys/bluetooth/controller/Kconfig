@@ -324,21 +324,22 @@ config BT_CTLR_PHY
 	select BT_CTLR_EXT_REJ_IND
 	default y if SOC_COMPATIBLE_NRF52X || BT_CTLR_PHY_2M_NRF
 
-endif # BT_CONN
-
-config BT_CTLR_CHAN_SEL_2
-	bool "Channel Selection Algorithm #2"
-	default y
-	help
-	  Enable support for Bluetooth 5.0 LE Channel Selection Algorithm #2 in
-	  the Controller.
-
 config BT_CTLR_MIN_USED_CHAN
 	bool "Minimum Number of Used Channels"
 	default y
 	help
 	  Enable support for Bluetooth 5.0 Minimum Number of Used Channels
 	  Procedure in the Controller.
+
+endif # BT_CONN
+
+config BT_CTLR_CHAN_SEL_2
+	bool "Channel Selection Algorithm #2"
+	depends on BT_CONN || BT_CTLR_ADV_EXT
+	default y
+	help
+	  Enable support for Bluetooth 5.0 LE Channel Selection Algorithm #2 in
+	  the Controller.
 
 config BT_CTLR_ADV_EXT
 	bool "LE Advertising Extensions"
@@ -406,11 +407,19 @@ config BT_CTLR_PHY_2M
 
 config BT_CTLR_PHY_CODED
 	bool "Coded PHY Support"
-	depends on (BT_CTLR_PHY || BT_CTLR_ADV_EXT) && SOC_NRF52840
+	depends on (BT_CTLR_PHY || BT_CTLR_ADV_EXT) && HAS_HW_NRF_RADIO_BLE_CODED
 	default y
 	help
 	  Enable support for Bluetooth 5.0 Coded PHY in the Controller.
 endif # BT_PHY_UPDATE
+
+config BT_CTLR_ZLI
+	bool "Use Zero Latency IRQs"
+	depends on ZERO_LATENCY_IRQS
+	help
+	  Enable support for use of Zero Latency IRQ feature. Note, applications
+	  shall not use Zero Latency IRQ themselves when this option is selected,
+	  else will impact controller stability.
 
 if BT_LL_SW_LEGACY
 
@@ -509,14 +518,6 @@ config BT_CTLR_ULL_LOW_PRIO
 	  The interrupt priority for Ticker's Job IRQ and Upper Link Layer
 	  lower priority functions.
 
-config BT_CTLR_LOWEST_PRIO
-	int "Link Layer Lowest IRQ priority"
-	range BT_CTLR_ULL_LOW_PRIO 3 if SOC_SERIES_NRF51X
-	range BT_CTLR_ULL_LOW_PRIO 6 if SOC_SERIES_NRF52X
-	default BT_CTLR_ULL_LOW_PRIO
-	help
-	  The interrupt priority for RNG and other non-critical functions.
-
 config BT_CTLR_LOW_LAT
 	bool "Low latency non-negotiating event preemption"
 	default y if SOC_SERIES_NRF51X
@@ -534,6 +535,17 @@ config BT_CTLR_LOW_LAT_ULL
 	help
 	  Low latency ULL implementation that uses tailchaining instead of while
 	  loop to demux rx messages from LLL.
+
+config BT_CTLR_CONN_META
+	prompt "Enable connection meta data extension"
+	bool
+	help
+	  Enables vendor specific per-connection meta data as part of the
+	  LLL connection object.
+
+config BT_CTLR_RX_PDU_META
+	prompt "Enable RX pdu meta data"
+	bool
 
 endif # BT_LL_SW_SPLIT
 
@@ -652,7 +664,7 @@ config BT_MAYFLY_YIELD_AFTER_CALL
 
 config BT_TICKER_COMPATIBILITY_MODE
 	bool "Ticker compatibility mode"
-	default y if SOC_SERIES_NRF51X
+	default y if SOC_SERIES_NRF51X || BT_LL_SW_LEGACY
 	help
 	  This option enables legacy ticker scheduling which defers overlapping
 	  ticker node timeouts and thereby prevents ticker interrupts during
@@ -767,7 +779,7 @@ config BT_CTLR_ASSERT_HANDLER
 	help
 	  This option enables an application-defined sink for the
 	  controller assertion mechanism. This must be defined in
-	  application code as void \"bt_controller_assert_handle(char \*, int)\"
+	  application code as void \"bt_ctlr_assert_handle(char \*, int)\"
 	  and will be invoked whenever the controller code encounters
 	  an unrecoverable error.
 

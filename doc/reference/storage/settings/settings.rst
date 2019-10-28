@@ -69,9 +69,10 @@ backend.
 Zephyr Storage Backends
 ***********************
 
-Zephyr has two existing backend storages which can be a Flash Circular Buffer
-(:option:`CONFIG_SETTINGS_FCB`) or a file in the filesystem
-(:option:`CONFIG_SETTINGS_FS`).
+Zephyr has three storage backends: a Flash Circular Buffer
+(:option:`CONFIG_SETTINGS_FCB`), a file in the filesystem
+(:option:`CONFIG_SETTINGS_FS`), or non-volatile storage
+(:option:`CONFIG_SETTINGS_NVS`).
 
 You can declare multiple sources for settings; settings from
 all of these are restored when ``settings_load()`` is called.
@@ -84,18 +85,24 @@ using ``settings_fcb_dst()``. As a side-effect,  ``settings_fcb_src()``
 initializes the FCB area, so it must be called before calling
 ``settings_fcb_dst()``. File read target is registered using
 ``settings_file_src()``, and write target by using ``settings_file_dst()``.
+Non-volatile storage read target is registered using
+``settings_nvs_src()``, and write target by using
+``settings_nvs_dst()``.
 
 Loading data from persisted storage
 ***********************************
 
 A call to ``settings_load()`` uses an ``h_set`` implementation
 to load settings data from storage to volatile memory.
-For both FCB and filesystem back-end the most
-recent key values are guaranteed by traversing all stored content
-and (potentially) overwriting older key values with newer ones.
 After all data is loaded, the ``h_commit`` handler is issued,
 signalling the application that the settings were successfully
 retrieved.
+
+Technically FCB and filesystem backends may store some history of the entities.
+This means that the newest data entity is stored after any
+older existing data entities.
+Starting with Zephyr 2.1, the back-end must filter out all old entities and
+call the callback with only the newest entity.
 
 Storing data to persistent storage
 **********************************

@@ -117,6 +117,7 @@ struct uarte_nrfx_data {
 struct uarte_nrfx_config {
 	NRF_UARTE_Type *uarte_regs; /* Instance address */
 	bool rts_cts_pins_set;
+	bool gpio_mgmt;
 #ifdef CONFIG_UART_ASYNC_API
 	nrfx_timer_t timer;
 #endif
@@ -274,8 +275,19 @@ static int uarte_nrfx_configure(struct device *dev,
 {
 	nrf_uarte_parity_t parity;
 	nrf_uarte_hwfc_t hwfc;
+#ifdef UARTE_CONFIG_STOP_Two
+	bool two_stop_bits = false;
+#endif
 
-	if (cfg->stop_bits != UART_CFG_STOP_BITS_1) {
+	switch (cfg->stop_bits) {
+	case UART_CFG_STOP_BITS_1:
+		break;
+#ifdef UARTE_CONFIG_STOP_Two
+	case UART_CFG_STOP_BITS_2:
+		two_stop_bits = true;
+		break;
+#endif
+	default:
 		return -ENOTSUP;
 	}
 
@@ -315,6 +327,13 @@ static int uarte_nrfx_configure(struct device *dev,
 
 	nrf_uarte_configure(get_uarte_instance(dev), parity, hwfc);
 
+#ifdef UARTE_CONFIG_STOP_Two
+	if (two_stop_bits) {
+		/* TODO Change this to nrfx HAL function when available */
+		get_uarte_instance(dev)->CONFIG |=
+			UARTE_CONFIG_STOP_Two << UARTE_CONFIG_STOP_Pos;
+	}
+#endif
 	get_dev_data(dev)->uart_config = *cfg;
 
 	return 0;
@@ -467,7 +486,8 @@ static int uarte_nrfx_tx(struct device *dev, const u8_t *buf, size_t len,
 	nrf_uarte_tx_buffer_set(uarte, buf, len);
 	nrf_uarte_task_trigger(uarte, NRF_UARTE_TASK_STARTTX);
 	if (data->uart_config.flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
-		k_timer_start(&data->async->tx_timeout_timer, timeout, 0);
+		k_timer_start(&data->async->tx_timeout_timer, timeout,
+			      K_NO_WAIT);
 	}
 	return 0;
 }
@@ -1209,9 +1229,11 @@ static void uarte_nrfx_set_power_state(struct device *dev, u32_t new_state)
 	u32_t rx_pin = nrf_uarte_rx_pin_get(uarte);
 
 	if (new_state == DEVICE_PM_ACTIVE_STATE) {
-		nrf_gpio_pin_write(tx_pin, 1);
-		nrf_gpio_cfg_output(tx_pin);
-		nrf_gpio_cfg_input(rx_pin, NRF_GPIO_PIN_NOPULL);
+		if (get_dev_config(dev)->gpio_mgmt) {
+			nrf_gpio_pin_write(tx_pin, 1);
+			nrf_gpio_cfg_output(tx_pin);
+			nrf_gpio_cfg_input(rx_pin, NRF_GPIO_PIN_NOPULL);
+		}
 
 		nrf_uarte_enable(uarte);
 #ifdef CONFIG_UART_ASYNC_API
@@ -1231,8 +1253,10 @@ static void uarte_nrfx_set_power_state(struct device *dev, u32_t new_state)
 #ifdef CONFIG_UART_ASYNC_API
 		if (get_dev_data(dev)->async) {
 			nrf_uarte_disable(uarte);
-			nrf_gpio_cfg_default(tx_pin);
-			nrf_gpio_cfg_default(rx_pin);
+			if (get_dev_config(dev)->gpio_mgmt) {
+				nrf_gpio_cfg_default(tx_pin);
+				nrf_gpio_cfg_default(rx_pin);
+			}
 			return;
 		}
 #endif
@@ -1242,8 +1266,10 @@ static void uarte_nrfx_set_power_state(struct device *dev, u32_t new_state)
 		}
 		nrf_uarte_event_clear(uarte, NRF_UARTE_EVENT_RXTO);
 		nrf_uarte_disable(uarte);
-		nrf_gpio_cfg_default(tx_pin);
-		nrf_gpio_cfg_default(rx_pin);
+		if (get_dev_config(dev)->gpio_mgmt) {
+			nrf_gpio_cfg_default(tx_pin);
+			nrf_gpio_cfg_default(rx_pin);
+		}
 	}
 }
 
@@ -1289,6 +1315,7 @@ static int uarte_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 		.uarte_regs = (NRF_UARTE_Type *)			       \
 			DT_NORDIC_NRF_UARTE_UART_##idx##_BASE_ADDRESS,	       \
 		.rts_cts_pins_set = IS_ENABLED(UARTE_##idx##_CONFIG_RTS_CTS),  \
+		.gpio_mgmt = IS_ENABLED(CONFIG_UART_##idx##_GPIO_MANAGEMENT),  \
 		COND_CODE_1(IS_ENABLED(CONFIG_UART_##idx##_NRF_HW_ASYNC),      \
 			(.timer = NRFX_TIMER_INSTANCE(			       \
 				CONFIG_UART_##idx##_NRF_HW_ASYNC_TIMER),),     \

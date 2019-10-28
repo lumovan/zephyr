@@ -63,6 +63,12 @@ features:
 +-----------+------------+-------------------------------------+
 | PINMUX    | on-chip    | pinmux                              |
 +-----------+------------+-------------------------------------+
+| PS/2      | on-chip    | ps2                                 |
++-----------+------------+-------------------------------------+
+| KSCAN     | on-chip    | kscan                               |
++-----------+------------+-------------------------------------+
+
+
 
 Other hardware features are not currently supported by Zephyr (at the moment)
 
@@ -171,7 +177,7 @@ PVT SPI, SHD SPI and LED0-2 respectively.
 +----------+----------+--------+-----------+----------+---------+
 |  7-8     |          | 8-9    | 8-9       | 8-9      | 5-6     |
 +----------+----------+--------+-----------+----------+---------+
-|  10-12   |  10-11   |        | 11-12     | 11-12    |         |
+|  10-11   |  10-11   |        | 11-12     | 11-12    |         |
 +----------+----------+--------+-----------+----------+---------+
 |          |          |        | 14-15     | 14-15    |         |
 +----------+----------+--------+-----------+----------+---------+
@@ -221,14 +227,37 @@ in reference section below.
 Programming and Debugging
 *************************
 
+Setup
+=====
+
+#. Clone the `SPI Image Gen`_ repository or download the files within
+   that directory.
+
+#. Make the image generation available for Zephyr, by making the tool
+   searchable by path, or by setting an environment variable
+   ``EVERGLADES_SPI_GEN``, for example:
+
+   .. code-block:: console
+
+      export EVERGLADES_SPI_GEN=<path to tool>/everglades_spi_gen_lin64
+
+   Note that the tools for Linux and Windows have different file names.
+
+#. If needed, a custom SPI image configuration file can be specified
+   to override the default one.
+
+   .. code-block:: console
+
+      export EVERGLADES_SPI_CFG=custom_spi_cfg.txt
+
 Building
-==========
+========
 
 #. Build :ref:`hello_world` application as you would normally do.
 
-#. Once you have ``zephyr.bin``, proceed to use the `SPI Image Gen`_ microchip tool
-   in order to create the the final binary. You need the output from  this tool
-   to flash in the SHD SPI memory.
+#. The file :file:`spi_image.bin` will be created if the build system
+   can find the image generation tool. This binary image can be used
+   to flash the SPI chip.
 
 Flashing
 ========
@@ -238,7 +267,7 @@ Flashing
      :align: center
      :alt: SPI DONGLE ASSY 6791
 
-#. Connect the SPI Dongle ASSY 6791 to ``J36`` in the EVB. See the image above.
+#. Connect the SPI Dongle ASSY 6791 to ``J44`` in the EVB. See the image above.
 
 #. Then proceed to flash the SPI NOR ``U3`` at offset 0x0 using Dediprog SF100
    or a similar tool for flashing SPI chips.

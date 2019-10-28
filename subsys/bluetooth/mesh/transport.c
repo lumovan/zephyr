@@ -367,7 +367,7 @@ static int send_seg(struct bt_mesh_net_tx *net_tx, struct net_buf_simple *sdu,
 		tx->ttl = net_tx->ctx->send_ttl;
 	}
 
-	seq_zero = tx->seq_auth & 0x1fff;
+	seq_zero = tx->seq_auth & TRANS_SEQ_ZERO_MASK;
 
 	BT_DBG("SeqZero 0x%04x", seq_zero);
 
@@ -485,6 +485,7 @@ int bt_mesh_trans_send(struct bt_mesh_net_tx *tx, struct net_buf_simple *msg,
 {
 	const u8_t *key;
 	u8_t *ad;
+	u8_t aid;
 	int err;
 
 	if (net_buf_simple_tailroom(msg) < 4) {
@@ -500,26 +501,13 @@ int bt_mesh_trans_send(struct bt_mesh_net_tx *tx, struct net_buf_simple *msg,
 	       tx->ctx->app_idx, tx->ctx->addr);
 	BT_DBG("len %u: %s", msg->len, bt_hex(msg->data, msg->len));
 
-	if (tx->ctx->app_idx == BT_MESH_KEY_DEV) {
-		key = bt_mesh.dev_key;
-		tx->aid = 0U;
-	} else {
-		struct bt_mesh_app_key *app_key;
-
-		app_key = bt_mesh_app_key_find(tx->ctx->app_idx);
-		if (!app_key) {
-			return -EINVAL;
-		}
-
-		if (tx->sub->kr_phase == BT_MESH_KR_PHASE_2 &&
-		    app_key->updated) {
-			key = app_key->keys[1].val;
-			tx->aid = app_key->keys[1].id;
-		} else {
-			key = app_key->keys[0].val;
-			tx->aid = app_key->keys[0].id;
-		}
+	err = bt_mesh_app_key_get(tx->sub, tx->ctx->app_idx, &key,
+				  &aid);
+	if (err) {
+		return err;
 	}
+
+	tx->aid = aid;
 
 	if (!tx->ctx->send_rel || net_buf_simple_tailroom(msg) < 8) {
 		tx->aszmic = 0U;
@@ -716,7 +704,7 @@ static struct seg_tx *seg_tx_lookup(u16_t seq_zero, u8_t obo, u16_t addr)
 	for (i = 0; i < ARRAY_SIZE(seg_tx); i++) {
 		tx = &seg_tx[i];
 
-		if ((tx->seq_auth & 0x1fff) != seq_zero) {
+		if ((tx->seq_auth & TRANS_SEQ_ZERO_MASK) != seq_zero) {
 			continue;
 		}
 
@@ -754,7 +742,7 @@ static int trans_ack(struct bt_mesh_net_rx *rx, u8_t hdr,
 
 	seq_zero = net_buf_simple_pull_be16(buf);
 	obo = seq_zero >> 15;
-	seq_zero = (seq_zero >> 2) & 0x1fff;
+	seq_zero = (seq_zero >> 2) & TRANS_SEQ_ZERO_MASK;
 
 	if (IS_ENABLED(CONFIG_BT_MESH_FRIEND) && rx->friend_match) {
 		BT_DBG("Ack for LPN 0x%04x of this Friend", rx->ctx.recv_dst);
@@ -1013,7 +1001,7 @@ static int send_ack(struct bt_mesh_subnet *sub, u16_t src, u16_t dst,
 		.src = obo ? bt_mesh_primary_addr() : src,
 		.xmit = bt_mesh_net_transmit_get(),
 	};
-	u16_t seq_zero = *seq_auth & 0x1fff;
+	u16_t seq_zero = *seq_auth & TRANS_SEQ_ZERO_MASK;
 	u8_t buf[6];
 
 	BT_DBG("SeqZero 0x%04x Block 0x%08x OBO %u", seq_zero, block, obo);
@@ -1223,7 +1211,7 @@ static int trans_seg(struct net_buf_simple *buf, struct bt_mesh_net_rx *net_rx,
 
 	seq_zero = net_buf_simple_pull_be16(buf);
 	seg_o = (seq_zero & 0x03) << 3;
-	seq_zero = (seq_zero >> 2) & 0x1fff;
+	seq_zero = (seq_zero >> 2) & TRANS_SEQ_ZERO_MASK;
 	seg_n = net_buf_simple_pull_u8(buf);
 	seg_o |= seg_n >> 5;
 	seg_n &= 0x1f;
@@ -1599,4 +1587,35 @@ void bt_mesh_heartbeat_send(void)
 
 	bt_mesh_ctl_send(&tx, TRANS_CTL_OP_HEARTBEAT, &hb, sizeof(hb),
 			 NULL, NULL, NULL);
+}
+
+int bt_mesh_app_key_get(const struct bt_mesh_subnet *subnet, u16_t app_idx,
+			const u8_t **key, u8_t *aid)
+{
+	struct bt_mesh_app_key *app_key;
+
+	if (app_idx == BT_MESH_KEY_DEV) {
+		*aid = 0;
+		*key = bt_mesh.dev_key;
+		return 0;
+	}
+
+	if (!subnet) {
+		return -EINVAL;
+	}
+
+	app_key = bt_mesh_app_key_find(app_idx);
+	if (!app_key) {
+		return -ENOENT;
+	}
+
+	if (subnet->kr_phase == BT_MESH_KR_PHASE_2 && app_key->updated) {
+		*key = app_key->keys[1].val;
+		*aid = app_key->keys[1].id;
+	} else {
+		*key = app_key->keys[0].val;
+		*aid = app_key->keys[0].id;
+	}
+
+	return 0;
 }

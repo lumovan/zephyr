@@ -15,14 +15,13 @@
 #include <kernel.h>
 #include <init.h>
 #include <cortex_m/exc.h>
-#include <nrfx.h>
-#include <nrf_power.h>
+#include <hal/nrf_power.h>
 #include <soc/nrfx_coredep.h>
 #include <logging/log.h>
 
 #ifdef CONFIG_RUNTIME_NMI
-extern void z_NmiInit(void);
-#define NMI_INIT() z_NmiInit()
+extern void z_arm_nmi_init(void);
+#define NMI_INIT() z_arm_nmi_init()
 #else
 #define NMI_INIT()
 #endif
@@ -38,8 +37,6 @@ extern void z_NmiInit(void);
 #else
 #error "Unknown SoC."
 #endif
-
-#include <hal/nrf_power.h>
 
 #define LOG_LEVEL CONFIG_SOC_LOG_LEVEL
 LOG_MODULE_REGISTER(soc);

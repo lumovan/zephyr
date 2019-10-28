@@ -9,6 +9,17 @@
 
 if SOC_FAMILY_STM32
 
+# SYSTICK is the default tick source on STM32 Socs
+config CORTEX_M_SYSTICK
+	default y
+
+if CLOCK_CONTROL
+
+config CLOCK_CONTROL_STM32_CUBE
+	default y
+
+endif #CLOCK_CONTROL
+
 if SERIAL
 
 config UART_STM32
@@ -44,6 +55,9 @@ if WATCHDOG
 config IWDG_STM32
 	default y
 
+config WWDG_STM32
+	default n
+
 endif # WATCHDOG
 
 if PWM
@@ -73,13 +87,6 @@ config USB_DC_STM32
 	default y
 
 endif # USB
-
-if RTC
-
-config RTC_STM32
-	default y
-
-endif # RTC
 
 if COUNTER
 

@@ -4,6 +4,9 @@
 
 if BOARD_GPMRB
 
+config MULTIBOOT
+	default n
+
 config BOARD
 	default "gpmrb"
 

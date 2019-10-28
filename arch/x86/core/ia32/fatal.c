@@ -19,7 +19,8 @@
 #include <ia32/exception.h>
 #include <inttypes.h>
 #include <exc_handle.h>
-#include <logging/log_ctrl.h>
+#include <logging/log.h>
+LOG_MODULE_DECLARE(os);
 
 __weak void z_debug_fatal_hook(const z_arch_esf_t *esf) { ARG_UNUSED(esf); }
 
@@ -40,7 +41,7 @@ static bool check_stack_bounds(u32_t addr, size_t size, u16_t cs)
 {
 	u32_t start, end;
 
-	if (z_is_in_isr()) {
+	if (z_arch_is_in_isr()) {
 		/* We were servicing an interrupt */
 		start = (u32_t)Z_ARCH_THREAD_STACK_BUFFER(_interrupt_stack);
 		end = start + CONFIG_ISR_STACK_SIZE;
@@ -77,13 +78,13 @@ static void unwind_stack(u32_t base_ptr, u16_t cs)
 	int i;
 
 	if (base_ptr == 0U) {
-		z_fatal_print("NULL base ptr");
+		LOG_ERR("NULL base ptr");
 		return;
 	}
 
 	for (i = 0; i < MAX_STACK_FRAMES; i++) {
 		if (base_ptr % sizeof(base_ptr) != 0U) {
-			z_fatal_print("unaligned frame ptr");
+			LOG_ERR("unaligned frame ptr");
 			return;
 		}
 
@@ -97,7 +98,7 @@ static void unwind_stack(u32_t base_ptr, u16_t cs)
 		 * stack buffer
 		 */
 		if (check_stack_bounds((u32_t)frame, sizeof(*frame), cs)) {
-			z_fatal_print("     corrupted? (bp=%p)", frame);
+			LOG_ERR("     corrupted? (bp=%p)", frame);
 			break;
 		}
 #endif
@@ -105,12 +106,7 @@ static void unwind_stack(u32_t base_ptr, u16_t cs)
 		if (frame->ret_addr == 0U) {
 			break;
 		}
-#ifdef CONFIG_X86_IAMCU
-		z_fatal_print("     0x%08x", frame->ret_addr);
-#else
-		z_fatal_print("     0x%08x (0x%x)", frame->ret_addr,
-			      frame->args);
-#endif
+		LOG_ERR("     0x%08x (0x%x)", frame->ret_addr, frame->args);
 		base_ptr = frame->next;
 	}
 }
@@ -132,17 +128,17 @@ FUNC_NORETURN void z_arch_system_halt(unsigned int reason)
 FUNC_NORETURN void z_x86_fatal_error(unsigned int reason, const z_arch_esf_t *esf)
 {
 	if (esf != NULL) {
-		z_fatal_print("eax: 0x%08x, ebx: 0x%08x, ecx: 0x%08x, edx: 0x%08x",
-			      esf->eax, esf->ebx, esf->ecx, esf->edx);
-		z_fatal_print("esi: 0x%08x, edi: 0x%08x, ebp: 0x%08x, esp: 0x%08x",
-			      esf->esi, esf->edi, esf->ebp, esf->esp);
-		z_fatal_print("eflags: 0x%08x cs: 0x%04x cr3: %p", esf->eflags,
-			      esf->cs & 0xFFFFU, z_x86_page_tables_get());
+		LOG_ERR("eax: 0x%08x, ebx: 0x%08x, ecx: 0x%08x, edx: 0x%08x",
+			esf->eax, esf->ebx, esf->ecx, esf->edx);
+		LOG_ERR("esi: 0x%08x, edi: 0x%08x, ebp: 0x%08x, esp: 0x%08x",
+			esf->esi, esf->edi, esf->ebp, esf->esp);
+		LOG_ERR("eflags: 0x%08x cs: 0x%04x cr3: %p", esf->eflags,
+			esf->cs & 0xFFFFU, z_x86_page_tables_get());
 
 #ifdef CONFIG_EXCEPTION_STACK_TRACE
-		z_fatal_print("call trace:");
+		LOG_ERR("call trace:");
 #endif
-		z_fatal_print("eip: 0x%08x", esf->eip);
+		LOG_ERR("eip: 0x%08x", esf->eip);
 #ifdef CONFIG_EXCEPTION_STACK_TRACE
 		unwind_stack(esf->ebp, esf->cs);
 #endif
@@ -157,7 +153,7 @@ void z_x86_spurious_irq(const z_arch_esf_t *esf)
 	int vector = z_irq_controller_isr_vector_get();
 
 	if (vector >= 0) {
-		z_fatal_print("IRQ vector: %d", vector);
+		LOG_ERR("IRQ vector: %d", vector);
 	}
 
 	z_x86_fatal_error(K_ERR_SPURIOUS_IRQ, esf);
@@ -212,17 +208,17 @@ FUNC_NORETURN static void generic_exc_handle(unsigned int vector,
 {
 	switch (vector) {
 	case IV_GENERAL_PROTECTION:
-		z_fatal_print("General Protection Fault");
+		LOG_ERR("General Protection Fault");
 		break;
 	case IV_DEVICE_NOT_AVAILABLE:
-		z_fatal_print("Floating point unit not enabled");
+		LOG_ERR("Floating point unit not enabled");
 		break;
 	default:
-		z_fatal_print("CPU exception %d", vector);
+		LOG_ERR("CPU exception %d", vector);
 		break;
 	}
 	if ((BIT(vector) & _EXC_ERROR_CODE_FAULTS) != 0) {
-		z_fatal_print("Exception code: 0x%x", pEsf->errorCode);
+		LOG_ERR("Exception code: 0x%x", pEsf->errorCode);
 	}
 	z_x86_fatal_error(K_ERR_CPU_EXCEPTION, pEsf);
 }
@@ -277,25 +273,25 @@ EXC_FUNC_NOCODE(IV_MACHINE_CHECK);
 #define SGX	BIT(15)
 
 #ifdef CONFIG_X86_MMU
-static void dump_entry_flags(const char *name, x86_page_entry_data_t flags)
+static void dump_entry_flags(const char *name, u64_t flags)
 {
-	z_fatal_print("%s: 0x%x%x %s, %s, %s, %s", name, (u32_t)(flags>>32),
-	       (u32_t)(flags),
-	       flags & (x86_page_entry_data_t)MMU_ENTRY_PRESENT ?
-	       "Present" : "Non-present",
-	       flags & (x86_page_entry_data_t)MMU_ENTRY_WRITE ?
-	       "Writable" : "Read-only",
-	       flags & (x86_page_entry_data_t)MMU_ENTRY_USER ?
-	       "User" : "Supervisor",
-	       flags & (x86_page_entry_data_t)MMU_ENTRY_EXECUTE_DISABLE ?
-	       "Execute Disable" : "Execute Enabled");
+	LOG_ERR("%s: 0x%x%x %s, %s, %s, %s", name, (u32_t)(flags>>32),
+		(u32_t)(flags),
+		flags & MMU_ENTRY_PRESENT ?
+		"Present" : "Non-present",
+		flags & MMU_ENTRY_WRITE ?
+		"Writable" : "Read-only",
+		flags & MMU_ENTRY_USER ?
+		"User" : "Supervisor",
+		flags & MMU_ENTRY_EXECUTE_DISABLE ?
+		"Execute Disable" : "Execute Enabled");
 }
 
-static void dump_mmu_flags(struct x86_mmu_pdpt *pdpt, void *addr)
+static void dump_mmu_flags(struct x86_page_tables *ptables, void *addr)
 {
-	x86_page_entry_data_t pde_flags, pte_flags;
+	u64_t pde_flags, pte_flags;
 
-	z_x86_mmu_get_flags(pdpt, addr, &pde_flags, &pte_flags);
+	z_x86_mmu_get_flags(ptables, addr, &pde_flags, &pte_flags);
 
 	dump_entry_flags("PDE", pde_flags);
 	dump_entry_flags("PTE", pte_flags);
@@ -310,31 +306,31 @@ static void dump_page_fault(z_arch_esf_t *esf)
 	__asm__ ("mov %%cr2, %0" : "=r" (cr2));
 
 	err = esf->errorCode;
-	z_fatal_print("***** CPU Page Fault (error code 0x%08x)", err);
+	LOG_ERR("***** CPU Page Fault (error code 0x%08x)", err);
 
-	z_fatal_print("%s thread %s address 0x%08x",
-		      (err & US) != 0U ? "User" : "Supervisor",
-		      (err & ID) != 0U ? "executed" : ((err & WR) != 0U ?
-						       "wrote" :
-						       "read"), cr2);
+	LOG_ERR("%s thread %s address 0x%08x",
+		(err & US) != 0U ? "User" : "Supervisor",
+		(err & ID) != 0U ? "executed" : ((err & WR) != 0U ?
+						 "wrote" :
+						 "read"), cr2);
 
 #ifdef CONFIG_X86_MMU
 #ifdef CONFIG_X86_KPTI
 	if (err & US) {
-		dump_mmu_flags(&z_x86_user_pdpt, (void *)cr2);
+		dump_mmu_flags(&z_x86_user_ptables, (void *)cr2);
 		return;
 	}
 #endif
-	dump_mmu_flags(&z_x86_kernel_pdpt, (void *)cr2);
+	dump_mmu_flags(&z_x86_kernel_ptables, (void *)cr2);
 #endif
 }
 #endif /* CONFIG_EXCEPTION_DEBUG */
 
 #ifdef CONFIG_USERSPACE
-Z_EXC_DECLARE(z_arch_user_string_nlen);
+Z_EXC_DECLARE(z_x86_user_string_nlen);
 
 static const struct z_exc_handle exceptions[] = {
-	Z_EXC_HANDLE(z_arch_user_string_nlen)
+	Z_EXC_HANDLE(z_x86_user_string_nlen)
 };
 #endif
 
@@ -400,7 +396,7 @@ struct task_state_segment _df_tss = {
 	.es = DATA_SEG,
 	.ss = DATA_SEG,
 	.eip = (u32_t)df_handler_top,
-	.cr3 = (u32_t)&z_x86_kernel_pdpt
+	.cr3 = (u32_t)&z_x86_kernel_ptables
 };
 
 static __used void df_handler_bottom(void)
@@ -412,7 +408,7 @@ static __used void df_handler_bottom(void)
 	_df_tss.esp = (u32_t)(_df_stack + sizeof(_df_stack));
 	_df_tss.eip = (u32_t)df_handler_top;
 
-	z_fatal_print("Double Fault");
+	LOG_ERR("Double Fault");
 #ifdef CONFIG_THREAD_STACK_INFO
 	if (check_stack_bounds(_df_esf.esp, 0, _df_esf.cs)) {
 		reason = K_ERR_STACK_CHK_FAIL;
@@ -448,7 +444,7 @@ static FUNC_NORETURN __used void df_handler_top(void)
 	_main_tss.es = DATA_SEG;
 	_main_tss.ss = DATA_SEG;
 	_main_tss.eip = (u32_t)df_handler_bottom;
-	_main_tss.cr3 = (u32_t)&z_x86_kernel_pdpt;
+	_main_tss.cr3 = (u32_t)&z_x86_kernel_ptables;
 	_main_tss.eflags = 0U;
 
 	/* NT bit is set in EFLAGS so we will task switch back to _main_tss

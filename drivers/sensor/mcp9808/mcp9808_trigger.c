@@ -11,12 +11,10 @@
 #include <drivers/i2c.h>
 #include <sys/byteorder.h>
 #include <sys/__assert.h>
-
+#include <logging/log.h>
 #include "mcp9808.h"
 
-#define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
-#include <logging/log.h>
-LOG_MODULE_DECLARE(MCP9808);
+LOG_MODULE_DECLARE(MCP9808, CONFIG_SENSOR_LOG_LEVEL);
 
 static int mcp9808_reg_write(struct mcp9808_data *data, u8_t reg, u16_t val)
 {
@@ -175,7 +173,7 @@ void mcp9808_setup_interrupt(struct device *dev)
 	k_thread_create(&mcp9808_thread, mcp9808_thread_stack,
 			CONFIG_MCP9808_THREAD_STACK_SIZE,
 			(k_thread_entry_t)mcp9808_thread_main, dev, 0, NULL,
-			K_PRIO_COOP(CONFIG_MCP9808_THREAD_PRIORITY), 0, 0);
+			K_PRIO_COOP(CONFIG_MCP9808_THREAD_PRIORITY), 0, K_NO_WAIT);
 #else /* CONFIG_MCP9808_TRIGGER_GLOBAL_THREAD */
 	data->work.handler = mcp9808_gpio_thread_cb;
 	data->dev = dev;

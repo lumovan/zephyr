@@ -155,22 +155,16 @@ extern FUNC_NORETURN void z_cstart(void);
  *
  * @return N/A
  */
-#ifdef CONFIG_BOOT_TIME_MEASUREMENT
-	extern u64_t __start_time_stamp;
-#endif
-void _PrepC(void)
+void z_arm_prep_c(void)
 {
 	relocate_vector_table();
 	enable_floating_point();
 	z_bss_zero();
 	z_data_copy();
 #if defined(CONFIG_ARMV7_R) && defined(CONFIG_INIT_STACKS)
-	init_stacks();
+	z_arm_init_stacks();
 #endif
-#ifdef CONFIG_BOOT_TIME_MEASUREMENT
-	__start_time_stamp = 0U;
-#endif
-	z_IntLibInit();
+	z_arm_int_lib_init();
 	z_cstart();
 	CODE_UNREACHABLE;
 }

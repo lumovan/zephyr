@@ -6,14 +6,10 @@
 if SOC_ESP32
 
 config SOC
-	string
 	default "esp32"
 
 config IRQ_OFFLOAD_INTNUM
 	default 7
-
-config XTENSA_ASM2
-	default y
 
 config MP_NUM_CPUS
 	default 2

@@ -8,22 +8,6 @@
 
 #include <sys/atomic.h>
 
-/* These stubs aren't provided by the mocking framework, and I can't
- * find a proper place to put them as mocking seems not to have a
- * proper "arch" layer.
- */
-#ifdef ZTEST_UNITTEST
-static inline int z_arch_irq_lock(void)
-{
-	return 0;
-}
-
-static inline void z_arch_irq_unlock(int key)
-{
-	ARG_UNUSED(key);
-}
-#endif
-
 /* There's a spinlock validation framework available when asserts are
  * enabled.  It adds a relatively hefty overhead (about 3k or so) to
  * kernel code size, don't use on platforms known to be small. (Note
@@ -60,6 +44,23 @@ struct k_spinlock {
 	 * ID in the bottom two bits.
 	 */
 	uintptr_t thread_cpu;
+#endif
+
+#if defined(CONFIG_CPLUSPLUS) && !defined(CONFIG_SMP) && !defined(SPIN_VALIDATE)
+	/* If CONFIG_SMP and SPIN_VALIDATE are both not defined
+	 * the k_spinlock struct will have no members. The result
+	 * is that in C sizeof(k_spinlock) is 0 and in C++ it is 1.
+	 *
+	 * This size difference causes problems when the k_spinlock
+	 * is embedded into another struct like k_msgq, because C and
+	 * C++ will have different ideas on the offsets of the members
+	 * that come after the k_spinlock member.
+	 *
+	 * To prevent this we add a 1 byte dummy member to k_spinlock
+	 * when the user selects C++ support and k_spinlock would
+	 * otherwise be empty.
+	 */
+	char dummy;
 #endif
 };
 

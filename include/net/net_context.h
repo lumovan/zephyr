@@ -244,10 +244,15 @@ struct net_context {
 	net_pkt_get_pool_func_t data_pool;
 #endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */
 
-#if defined(CONFIG_NET_TCP)
+#if defined(CONFIG_NET_TCP1)
 	/** TCP connection information */
 	struct net_tcp *tcp;
-#endif /* CONFIG_NET_TCP */
+#endif /* CONFIG_NET_TCP1 */
+
+#if defined(CONFIG_NET_TCP2)
+	/** TCP connection information */
+	void *tcp;
+#endif /* CONFIG_NET_TCP2 */
 
 #if defined(CONFIG_NET_CONTEXT_SYNC_RECV)
 	/**
@@ -257,6 +262,9 @@ struct net_context {
 #endif /* CONFIG_NET_CONTEXT_SYNC_RECV */
 
 #if defined(CONFIG_NET_SOCKETS)
+	/** BSD socket private data */
+	void *socket_data;
+
 	/** Per-socket packet or connection queues */
 	union {
 		struct k_fifo recv_q;

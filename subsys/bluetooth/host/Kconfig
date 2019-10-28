@@ -10,7 +10,7 @@
 comment "Host Stack Configuration"
 
 config BT_HCI_HOST
-	# Virtual/hidden option to make the conditions more intuitive
+	# Hidden option to make the conditions more intuitive
 	bool
 	default y
 	depends on !BT_HCI_RAW
@@ -63,9 +63,9 @@ config BT_DISCARDABLE_BUF_COUNT
 	  block and may even eliminate deadlocks in some cases.
 
 config BT_HCI_TX_STACK_SIZE
-	# NOTE: This value is derived from other symbols and should not be
-	# user-configurable. Do not give it a prompt.
-	int
+	# NOTE: This value is derived from other symbols and should only be
+	# changed if required by architecture
+	int "HCI Tx thread stack size"
 	default 512 if BT_H4
 	default 512 if BT_H5
 	default 416 if BT_SPI
@@ -79,7 +79,18 @@ config BT_HCI_TX_STACK_SIZE
 	# the worst-case stack size if an out-of-tree controller is used.
 	default 1024
 	help
-	  Stack size needed for executing bt_send with specified driver
+	  Stack size needed for executing bt_send with specified driver.
+	  NOTE: This is an advanced setting and should not be changed unless
+	  absolutely necessary
+
+config BT_HCI_ECC_STACK_SIZE
+	# NOTE: This value is derived from other symbols and should only be
+	# changed if required by architecture
+	int "HCI ECC thread stack size"
+	default 1100
+	help
+	  NOTE: This is an advanced setting and should not be changed unless
+	  absolutely necessary
 
 config BT_HCI_TX_PRIO
 	# Hidden option for Co-Operative Tx thread priority
@@ -149,7 +160,7 @@ config BT_HOST_CRYPTO
 
 config BT_SETTINGS
 	bool "Store Bluetooth state and configuration persistently"
-	depends on SETTINGS && PRINTK
+	depends on SETTINGS
 	select MPU_ALLOW_FLASH_WRITE if ARM_MPU
 	help
 	  When selected, the Bluetooth stack will take care of storing
@@ -175,6 +186,17 @@ config BT_SETTINGS_CCC_STORE_ON_WRITE
 	  Choosing this option is safer for battery-powered devices or devices
 	  that expect to be reset suddenly. However, it requires additional
 	  workqueue stack space.
+
+config BT_SETTINGS_USE_PRINTK
+	bool "Use snprintk to encode Bluetooth settings key strings"
+	depends on SETTINGS && PRINTK
+	default y
+	help
+	  When selected, Bluetooth settings will use snprintk to encode
+	  key strings.
+	  When not selected, Bluetooth settings will use a faster builtin
+	  function to encode the key string. The drawback is that if
+	  printk is enabled then the program memory footprint will be larger.
 endif # BT_SETTINGS
 
 config BT_WHITELIST
@@ -329,6 +351,21 @@ config BT_OOB_DATA_FIXED
 	  value. This option should only be enabled for debugging and should
 	  never be used in production.
 
+config BT_KEYS_OVERWRITE_OLDEST
+	bool "Overwrite oldest keys with new ones if key storage is full"
+	help
+	  With this option enabled, if a pairing attempt occurs and the key storage
+	  is full, then the oldest keys in storage will be removed to free space
+	  for the new pairing keys.
+
+config BT_KEYS_SAVE_AGING_COUNTER_ON_PAIRING
+	bool "Store aging counter every time a successful paring occurs"
+	depends on BT_SETTINGS && BT_KEYS_OVERWRITE_OLDEST
+	help
+	  With this option enabled, aging counter will be stored in settings every
+	  time a successful pairing occurs. This increases flash wear out but offers
+	  a more correct finding of the oldest unused paiting info.
+
 endif # BT_SMP
 
 source "subsys/bluetooth/host/Kconfig.l2cap"
@@ -344,9 +381,20 @@ config BT_MAX_PAIRED
 	  default) number is 1.
 
 config BT_CREATE_CONN_TIMEOUT
-        int "Timeout for pending LE Create Connection command in seconds"
-        default 3
-        range 1 65535
+	int "Timeout for pending LE Create Connection command in seconds"
+	default 3
+	range 1 65535
+
+config BT_CONN_PARAM_UPDATE_TIMEOUT
+	int "Peripheral connection parameter update timeout in milliseconds"
+	default 5000
+	range 1 65535
+
+	help
+	  The value is a timeout used by peripheral device to wait until it
+	  starts the connection parameters update procedure to change default
+	  connection parameters. The default value is set to 5s, to comply
+	  with BT protocol specification: Core 4.2 Vol 3, Part C, 9.3.12.2
 
 endif # BT_CONN
 

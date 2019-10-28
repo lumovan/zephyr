@@ -6,9 +6,10 @@
 
 /**
  * @file
- * @brief Kernel fatal error handler for ARM Cortex-M
+ * @brief Kernel fatal error handler for ARM Cortex-M and Cortex-R
  *
- * This module provides the z_NanoFatalErrorHandler() routine for ARM Cortex-M.
+ * This module provides the z_arm_fatal_error() routine for ARM Cortex-M
+ * and Cortex-R CPUs.
  */
 
 #include <toolchain.h>
@@ -17,28 +18,29 @@
 
 #include <kernel.h>
 #include <kernel_structs.h>
-#include <logging/log_ctrl.h>
+#include <logging/log.h>
+LOG_MODULE_DECLARE(os);
 
 static void esf_dump(const z_arch_esf_t *esf)
 {
-	z_fatal_print("r0/a1:  0x%08x  r1/a2:  0x%08x  r2/a3:  0x%08x",
-		      esf->basic.a1, esf->basic.a2, esf->basic.a3);
-	z_fatal_print("r3/a4:  0x%08x r12/ip:  0x%08x r14/lr:  0x%08x",
-		      esf->basic.a4, esf->basic.ip, esf->basic.lr);
-	z_fatal_print(" xpsr:  0x%08x", esf->basic.xpsr);
+	LOG_ERR("r0/a1:  0x%08x  r1/a2:  0x%08x  r2/a3:  0x%08x",
+		esf->basic.a1, esf->basic.a2, esf->basic.a3);
+	LOG_ERR("r3/a4:  0x%08x r12/ip:  0x%08x r14/lr:  0x%08x",
+		esf->basic.a4, esf->basic.ip, esf->basic.lr);
+	LOG_ERR(" xpsr:  0x%08x", esf->basic.xpsr);
 #if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
 	for (int i = 0; i < 16; i += 4) {
-		z_fatal_print("s[%d]:  0x%08x  s[%d]:  0x%08x"
-			      "  s[%d]:  0x%08x  s[%d]:  0x%08x\n",
-			      i, (u32_t)esf->s[i],
-			      i + 1, (u32_t)esf->s[i + 1],
-			      i + 2, (u32_t)esf->s[i + 2],
-			      i + 3, (u32_t)esf->s[i + 3]);
+		LOG_ERR("s[%d]:  0x%08x  s[%d]:  0x%08x"
+			"  s[%d]:  0x%08x  s[%d]:  0x%08x\n",
+			i, (u32_t)esf->s[i],
+			i + 1, (u32_t)esf->s[i + 1],
+			i + 2, (u32_t)esf->s[i + 2],
+			i + 3, (u32_t)esf->s[i + 3]);
 	}
-	z_fatal_print("fpscr:  0x%08x\n", esf->fpscr);
+	LOG_ERR("fpscr:  0x%08x\n", esf->fpscr);
 #endif
-	z_fatal_print("Faulting instruction address (r15/pc): 0x%08x",
-		      esf->basic.pc);
+	LOG_ERR("Faulting instruction address (r15/pc): 0x%08x",
+		esf->basic.pc);
 }
 
 void z_arm_fatal_error(unsigned int reason, const z_arch_esf_t *esf)
@@ -50,6 +52,21 @@ void z_arm_fatal_error(unsigned int reason, const z_arch_esf_t *esf)
 	z_fatal_error(reason, esf);
 }
 
+/**
+ * @brief Handle a software-generated fatal exception
+ * (e.g. kernel oops, panic, etc.).
+ *
+ * Notes:
+ * - the function is invoked in SVC Handler
+ * - if triggered from nPRIV mode, only oops and stack fail error reasons
+ *   may be propagated to the fault handling process.
+ * - We expect the supplied exception stack frame to always be a valid
+ *   frame. That is because, if the ESF cannot be stacked during an SVC,
+ *   a processor fault (e.g. stacking error) will be generated, and the
+ *   fault handler will executed insted of the SVC.
+ *
+ * @param esf exception frame
+ */
 void z_do_kernel_oops(const z_arch_esf_t *esf)
 {
 	/* Stacked R0 holds the exception reason. */

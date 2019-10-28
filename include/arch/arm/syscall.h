@@ -6,9 +6,9 @@
 
 /**
  * @file
- * @brief ARM specific sycall header
+ * @brief ARM specific syscall header
  *
- * This header contains the ARM specific sycall interface.  It is
+ * This header contains the ARM specific syscall interface.  It is
  * included by the syscall interface architecture-abstraction header
  * (include/arch/syscall.h)
  */
@@ -26,6 +26,7 @@
 
 #include <zephyr/types.h>
 #include <stdbool.h>
+#include <arch/arm/cortex_m/cmsis.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,7 +53,7 @@ static inline u32_t z_arch_syscall_invoke6(u32_t arg1, u32_t arg2, u32_t arg3,
 			 : [svid] "i" (_SVC_CALL_SYSTEM_CALL),
 			   "r" (ret), "r" (r1), "r" (r2), "r" (r3),
 			   "r" (r4), "r" (r5), "r" (r6)
-			 : "r8", "memory");
+			 : "r8", "ip", "sp", "memory");
 
 	return ret;
 }
@@ -167,7 +168,7 @@ static inline bool z_arch_is_user_context(void)
 
 	/* if not handler mode, return mode information */
 	__asm__ volatile("mrs %0, CONTROL\n\t" : "=r"(value));
-	return (value & 0x1) ? true : false;
+	return (value & CONTROL_nPRIV_Msk) ? true : false;
 }
 
 #ifdef __cplusplus

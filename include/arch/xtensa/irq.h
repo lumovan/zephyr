@@ -34,6 +34,8 @@
 #define z_arch_irq_enable(irq)	z_soc_irq_enable(irq)
 #define z_arch_irq_disable(irq)	z_soc_irq_disable(irq)
 
+#define z_arch_irq_is_enabled(irq)	z_soc_irq_is_enabled(irq)
+
 #else
 
 #define CONFIG_NUM_IRQS XCHAL_NUM_INTERRUPTS
@@ -41,32 +43,15 @@
 #define z_arch_irq_enable(irq)	z_xtensa_irq_enable(irq)
 #define z_arch_irq_disable(irq)	z_xtensa_irq_disable(irq)
 
+#define z_arch_irq_is_enabled(irq)	z_xtensa_irq_is_enabled(irq)
+
 #endif
 
-/**
- *
- * @brief Enable an interrupt line
- *
- * Clear possible pending interrupts on the line, and enable the interrupt
- * line. After this call, the CPU will receive interrupts for the specified
- * IRQ.
- *
- * @return N/A
- */
 static ALWAYS_INLINE void z_xtensa_irq_enable(u32_t irq)
 {
 	z_xt_ints_on(1 << irq);
 }
 
-/**
- *
- * @brief Disable an interrupt line
- *
- * Disable an interrupt line. After this call, the CPU will stop receiving
- * interrupts for the specified IRQ.
- *
- * @return N/A
- */
 static ALWAYS_INLINE void z_xtensa_irq_disable(u32_t irq)
 {
 	z_xt_ints_off(1 << irq);
@@ -83,16 +68,12 @@ static ALWAYS_INLINE void z_arch_irq_unlock(unsigned int key)
 	XTOS_RESTORE_INTLEVEL(key);
 }
 
-/**
- * Returns true if interrupts were unlocked prior to the
- * z_arch_irq_lock() call that produced the key argument.
- */
 static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
 {
 	return (key & 0xf) == 0; /* INTLEVEL field */
 }
 
-extern int z_arch_irq_is_enabled(unsigned int irq);
+extern int z_xtensa_irq_is_enabled(unsigned int irq);
 
 #include <irq.h>
 
