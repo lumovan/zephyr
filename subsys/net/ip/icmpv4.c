@@ -12,7 +12,7 @@
 LOG_MODULE_REGISTER(net_icmpv4, CONFIG_NET_ICMPV4_LOG_LEVEL);
 
 #include <errno.h>
-#include <misc/slist.h>
+#include <sys/slist.h>
 #include <net/net_core.h>
 #include <net/net_pkt.h>
 #include <net/net_if.h>
@@ -60,7 +60,8 @@ int net_icmpv4_finalize(struct net_pkt *pkt)
 }
 
 static enum net_verdict icmpv4_handle_echo_request(struct net_pkt *pkt,
-						   struct net_ipv4_hdr *ip_hdr)
+						   struct net_ipv4_hdr *ip_hdr,
+						   struct net_icmp_hdr *icmp_hdr)
 {
 	struct net_pkt *reply = NULL;
 	const struct in_addr *src;
@@ -136,7 +137,9 @@ drop:
 int net_icmpv4_send_echo_request(struct net_if *iface,
 				 struct in_addr *dst,
 				 u16_t identifier,
-				 u16_t sequence)
+				 u16_t sequence,
+				 const void *data,
+				 size_t data_size)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(icmpv4_access,
 					      struct net_icmpv4_echo_req);
@@ -153,7 +156,8 @@ int net_icmpv4_send_echo_request(struct net_if *iface,
 	src = &iface->config.ip.ipv4->unicast[0].address.in_addr;
 
 	pkt = net_pkt_alloc_with_buffer(iface,
-					sizeof(struct net_icmpv4_echo_req),
+					sizeof(struct net_icmpv4_echo_req)
+					+ data_size,
 					AF_INET, IPPROTO_ICMP,
 					PKT_WAIT_TIME);
 	if (!pkt) {
@@ -175,6 +179,7 @@ int net_icmpv4_send_echo_request(struct net_if *iface,
 	echo_req->sequence   = htons(sequence);
 
 	net_pkt_set_data(pkt, &icmpv4_access);
+	net_pkt_write(pkt, data, data_size);
 
 	net_pkt_cursor_init(pkt);
 
@@ -327,7 +332,7 @@ enum net_verdict net_icmpv4_input(struct net_pkt *pkt,
 	SYS_SLIST_FOR_EACH_CONTAINER(&handlers, cb, node) {
 		if (cb->type == icmp_hdr->type &&
 		    (cb->code == icmp_hdr->code || cb->code == 0U)) {
-			return cb->handler(pkt, ip_hdr);
+			return cb->handler(pkt, ip_hdr, icmp_hdr);
 		}
 	}
 

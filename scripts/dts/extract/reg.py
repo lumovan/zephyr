@@ -4,6 +4,12 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# NOTE: This file is part of the old device tree scripts, which will be removed
+# later. They are kept to generate some legacy #defines via the
+# --deprecated-only flag.
+#
+# The new scripts are gen_defines.py, edtlib.py, and dtlib.py.
+
 from copy import deepcopy
 
 from extract.globals import *
@@ -41,8 +47,10 @@ class DTReg(DTDirective):
                     pass
 
                 if cs_gpios:
-                    extract_controller(node_path, "cs-gpios", cs_gpios, reg[0], def_label, "cs-gpio", True)
-                    extract_cells(node_path, "cs-gpios", cs_gpios, None, reg[0], def_label, "cs-gpio", True)
+                    extract_controller(node_path, "cs-gpios", cs_gpios, reg[0], def_label, "cs-gpio", True, True)
+                    extract_controller(node_path, "cs-gpios", cs_gpios, reg[0], def_label, "cs-gpios", True)
+                    extract_cells(node_path, "cs-gpios", cs_gpios, None, reg[0], def_label, "cs-gpio", True, True)
+                    extract_cells(node_path, "cs-gpios", cs_gpios, None, reg[0], def_label, "cs-gpios", True)
 
         # generate defines
         l_base = [def_label]
@@ -58,7 +66,7 @@ class DTReg(DTDirective):
             addr = 0
             size = 0
             # Check is defined should be indexed (_0, _1)
-            if index == 0 and len(props) < 3:
+            if index == 0 and len(props) <= (nr_address_cells + nr_size_cells):
                 # 1 element (len 2) or no element (len 0) in props
                 l_idx = []
             else:

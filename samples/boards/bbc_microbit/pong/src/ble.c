@@ -5,8 +5,8 @@
  */
 
 #include <zephyr.h>
-#include <misc/printk.h>
-#include <gpio.h>
+#include <sys/printk.h>
+#include <drivers/gpio.h>
 #include <device.h>
 #include <string.h>
 
@@ -230,7 +230,7 @@ static void connected(struct bt_conn *conn, u8_t err)
 	struct bt_conn_info info;
 
 	if (err) {
-		printk("Connection failed (err %u)\n", err);
+		printk("Connection failed (err 0x%02x)\n", err);
 		return;
 	}
 
@@ -255,7 +255,7 @@ static void connected(struct bt_conn *conn, u8_t err)
 
 static void disconnected(struct bt_conn *conn, u8_t reason)
 {
-	printk("Disconnected (reason %u)\n", reason);
+	printk("Disconnected (reason 0x%02x)\n", reason);
 
 	if (default_conn) {
 		bt_conn_unref(default_conn);
@@ -496,8 +496,6 @@ static void ble_timeout(struct k_work *work)
 	}
 }
 
-static struct bt_gatt_ccc_cfg pong_ccc_cfg[BT_GATT_CCC_MAX];
-
 static void pong_ccc_cfg_changed(const struct bt_gatt_attr *attr, u16_t val)
 {
 	printk("val %u\n", val);
@@ -509,15 +507,13 @@ static void pong_ccc_cfg_changed(const struct bt_gatt_attr *attr, u16_t val)
 	}
 }
 
-static struct bt_gatt_attr pong_attrs[] = {
+BT_GATT_SERVICE_DEFINE(pong_svc,
 	/* Vendor Primary Service Declaration */
 	BT_GATT_PRIMARY_SERVICE(&pong_svc_uuid.uuid),
 	BT_GATT_CHARACTERISTIC(&pong_chr_uuid.uuid, BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_NONE, NULL, NULL, NULL),
-	BT_GATT_CCC(pong_ccc_cfg, pong_ccc_cfg_changed),
-};
-
-static struct bt_gatt_service pong_svc = BT_GATT_SERVICE(pong_attrs);
+	BT_GATT_CCC(pong_ccc_cfg_changed),
+);
 
 void ble_init(void)
 {
@@ -533,7 +529,5 @@ void ble_init(void)
 
 	bt_conn_cb_register(&conn_callbacks);
 
-
-	local_attr = &pong_attrs[1];
-	bt_gatt_service_register(&pong_svc);
+	local_attr = &pong_svc.attrs[1];
 }

@@ -6,7 +6,7 @@
 
 #include <device.h>
 #include <errno.h>
-#include <pwm.h>
+#include <drivers/pwm.h>
 #include <soc.h>
 
 #define LOG_LEVEL CONFIG_PWM_LOG_LEVEL
@@ -90,30 +90,30 @@ static const struct pwm_driver_api sam_pwm_driver_api = {
 	.get_cycles_per_sec = sam_pwm_get_cycles_per_sec,
 };
 
-#ifdef DT_ATMEL_SAM_PWM_0
+#ifdef DT_INST_0_ATMEL_SAM_PWM
 static const struct sam_pwm_config sam_pwm_config_0 = {
-	.regs = (Pwm *)DT_ATMEL_SAM_PWM_0_BASE_ADDRESS,
-	.id = DT_ATMEL_SAM_PWM_0_PERIPHERAL_ID,
-	.prescaler = DT_ATMEL_SAM_PWM_0_PRESCALER,
-	.divider = DT_ATMEL_SAM_PWM_0_DIVIDER,
+	.regs = (Pwm *)DT_INST_0_ATMEL_SAM_PWM_BASE_ADDRESS,
+	.id = DT_INST_0_ATMEL_SAM_PWM_PERIPHERAL_ID,
+	.prescaler = DT_INST_0_ATMEL_SAM_PWM_PRESCALER,
+	.divider = DT_INST_0_ATMEL_SAM_PWM_DIVIDER,
 };
 
-DEVICE_AND_API_INIT(sam_pwm_0, DT_ATMEL_SAM_PWM_0_LABEL, &sam_pwm_init,
+DEVICE_AND_API_INIT(sam_pwm_0, DT_INST_0_ATMEL_SAM_PWM_LABEL, &sam_pwm_init,
 		    NULL, &sam_pwm_config_0,
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &sam_pwm_driver_api);
-#endif /* DT_ATMEL_SAM_PWM_0 */
+#endif /* DT_INST_0_ATMEL_SAM_PWM */
 
-#ifdef DT_ATMEL_SAM_PWM_1
+#ifdef DT_INST_1_ATMEL_SAM_PWM
 static const struct sam_pwm_config sam_pwm_config_1 = {
-	.regs = (Pwm *)DT_ATMEL_SAM_PWM_1_BASE_ADDRESS,
-	.id = DT_ATMEL_SAM_PWM_1_PERIPHERAL_ID,
-	.prescaler = DT_ATMEL_SAM_PWM_1_PRESCALER,
-	.divider = DT_ATMEL_SAM_PWM_1_DIVIDER,
+	.regs = (Pwm *)DT_INST_1_ATMEL_SAM_PWM_BASE_ADDRESS,
+	.id = DT_INST_1_ATMEL_SAM_PWM_PERIPHERAL_ID,
+	.prescaler = DT_INST_1_ATMEL_SAM_PWM_PRESCALER,
+	.divider = DT_INST_1_ATMEL_SAM_PWM_DIVIDER,
 };
 
-DEVICE_AND_API_INIT(sam_pwm_1, DT_ATMEL_SAM_PWM_1_LABEL, &sam_pwm_init,
+DEVICE_AND_API_INIT(sam_pwm_1, DT_INST_1_ATMEL_SAM_PWM_LABEL, &sam_pwm_init,
 		    NULL, &sam_pwm_config_1,
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &sam_pwm_driver_api);
-#endif /* DT_ATMEL_SAM_PWM_1 */
+#endif /* DT_INST_1_ATMEL_SAM_PWM */

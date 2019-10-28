@@ -15,6 +15,7 @@ if LOG
 
 config LOG_RUNTIME_FILTERING
 	bool "Enable runtime reconfiguration of the logger"
+	depends on !LOG_FRONTEND
 	help
 	  Allow runtime configuration of maximal, independent severity
 	  level for instance.
@@ -69,6 +70,7 @@ config LOG_MAX_LEVEL
 	  - 4 DEBUG, maximal level set to LOG_LEVEL_DBG
 
 menu "Prepend log message with function name"
+	depends on !LOG_FRONTEND
 
 config LOG_FUNC_NAME_PREFIX_ERR
 	bool "Error messages prepended"
@@ -176,6 +178,17 @@ config LOG_BUFFER_SIZE
 	help
 	  Number of bytes dedicated for the logger internal buffer.
 
+config LOG_DETECT_MISSED_STRDUP
+	bool "Detect missed handling of transient strings"
+	default y if !LOG_IMMEDIATE
+	help
+	  If enabled, logger will assert and log error message is it detects
+	  that string format specifier (%s) and string address which is not from
+	  read only memory section and not from pool used for string duplicates.
+	  String argument must be duplicated in that case using log_strdup().
+	  Detection is performed during log processing thus it does not impact
+	  logging timing.
+
 config LOG_STRDUP_MAX_STRING
 	int "Longest string that can be duplicated using log_strdup()"
 	default 46 if NETWORKING
@@ -193,6 +206,12 @@ config LOG_STRDUP_BUF_COUNT
 	  Each entry takes CONFIG_LOG_STRDUP_MAX_STRING bytes of memory plus
 	  some additional fixed overhead.
 
+config LOG_STRDUP_POOL_PROFILING
+	bool "Enable profiling of pool used for log_strdup()"
+	help
+	  When enabled, maximal utilization of the pool is tracked. It can
+	  be read out using shell command.
+
 endif # !LOG_IMMEDIATE
 
 config LOG_DOMAIN_ID
@@ -206,6 +225,14 @@ config LOG_CMDS
 	bool "Enable shell commands"
 	depends on SHELL
 	default y if SHELL
+
+config LOG_FRONTEND
+	bool "Enable frontend"
+	default n
+	select LOG_IMMEDIATE
+	help
+	  When enabled, logs are redirected to a custom frontend instead
+	  of being processed by the logger.
 
 config LOG_BACKEND_UART
 	bool "Enable UART backend"
@@ -345,6 +372,12 @@ config LOG_BACKEND_NATIVE_POSIX
 	depends on ARCH_POSIX
 	help
 	  Enable backend in native_posix
+
+config LOG_BACKEND_QEMU_X86_64
+	bool "Enable QEMU x86_64 backend"
+	depends on BOARD_QEMU_X86_64
+	help
+	  Enable backend for qemu_x86_64 board
 
 config LOG_BACKEND_XTENSA_SIM
 	bool "Enable xtensa simulator backend"

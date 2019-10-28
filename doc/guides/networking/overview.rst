@@ -78,10 +78,10 @@ can be disabled if not needed.
   applications are implemented.
 
 * **LWM2M** OMA Lightweight Machine-to-Machine Protocol
-  (`LwM2M specification 1.0.2`_) is
-  supported via the "Register Device" API (Register, De-Register and Update)
-  and has template implementations for Security, Server, Device Management and
-  Firmware objects. Bootstrap support is currently not supported.
+  (`LwM2M specification 1.0.2`_) is supported via the "Bootstrap", "Client
+  Registration", "Device Management & Service Enablement" and "Information
+  Reporting" interfaces.  The required core LwM2M objects are implemented as
+  well as several IPSO Smart Objects.
   :ref:`lwm2m-client-sample` implements the library as an example.
 
 * **DNS** Domain Name Service
@@ -145,7 +145,7 @@ The networking stack source code tree is organized as follows:
 
 ``subsys/net/l2/``
   This is where the IP stack layer 2 code is located. This includes generic
-  support for Bluetooth IPSP adaptation, Ethernet, IEEE 802.15.4 and WiFI.
+  support for Bluetooth IPSP adaptation, Ethernet, IEEE 802.15.4 and Wi-Fi.
 
 ``subsys/net/lib/``
   Application-level protocols (DNS, MQTT, etc.) and additional stack

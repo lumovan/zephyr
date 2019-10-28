@@ -34,6 +34,10 @@ struct lll_adv {
 	u8_t is_mesh:1;
 #endif /* CONFIG_BT_HCI_MESH_EXT */
 
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	u8_t  rl_idx;
+#endif /* CONFIG_BT_CTLR_PRIVACY */
+
 	struct lll_adv_pdu adv_data;
 	struct lll_adv_pdu scan_rsp;
 };
@@ -97,3 +101,5 @@ static inline struct pdu_adv *lll_adv_scan_rsp_peek(struct lll_adv *lll)
 {
 	return (void *)lll->scan_rsp.pdu[lll->scan_rsp.last];
 }
+
+extern u16_t ull_adv_lll_handle_get(struct lll_adv *lll);

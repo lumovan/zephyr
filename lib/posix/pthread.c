@@ -6,11 +6,11 @@
 
 #include <kernel.h>
 #include <stdio.h>
-#include <atomic.h>
+#include <sys/atomic.h>
 #include <ksched.h>
 #include <wait_q.h>
 #include <posix/pthread.h>
-#include <misc/slist.h>
+#include <sys/slist.h>
 
 #define PTHREAD_INIT_FLAGS	PTHREAD_CANCEL_ENABLE
 #define PTHREAD_CANCELED	((void *) -1)
@@ -35,7 +35,7 @@ static const pthread_attr_t init_pthread_attrs = {
 };
 
 static struct posix_thread posix_thread_pool[CONFIG_MAX_PTHREAD_COUNT];
-static u32_t pthread_num;
+PTHREAD_MUTEX_DEFINE(pthread_pool_lock);
 
 static bool is_posix_prio_valid(u32_t priority, int policy)
 {
@@ -132,6 +132,7 @@ int pthread_create(pthread_t *newthread, const pthread_attr_t *attr,
 		   void *(*threadroutine)(void *), void *arg)
 {
 	s32_t prio;
+	u32_t pthread_num;
 	pthread_condattr_t cond_attr;
 	struct posix_thread *thread;
 
@@ -145,6 +146,17 @@ int pthread_create(pthread_t *newthread, const pthread_attr_t *attr,
 		return EINVAL;
 	}
 
+	pthread_mutex_lock(&pthread_pool_lock);
+	for (pthread_num = 0;
+	    pthread_num < CONFIG_MAX_PTHREAD_COUNT; pthread_num++) {
+		thread = &posix_thread_pool[pthread_num];
+		if (thread->state == PTHREAD_TERMINATED) {
+			thread->state = PTHREAD_JOINABLE;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&pthread_pool_lock);
+
 	if (pthread_num >= CONFIG_MAX_PTHREAD_COUNT) {
 		return EAGAIN;
 	}
@@ -152,8 +164,12 @@ int pthread_create(pthread_t *newthread, const pthread_attr_t *attr,
 	prio = posix_to_zephyr_priority(attr->priority, attr->schedpolicy);
 
 	thread = &posix_thread_pool[pthread_num];
-	pthread_mutex_init(&thread->state_lock, NULL);
-	pthread_mutex_init(&thread->cancel_lock, NULL);
+	/*
+	 * Ignore return value, as we know that Zephyr implementation
+	 * cannot fail.
+	 */
+	(void)pthread_mutex_init(&thread->state_lock, NULL);
+	(void)pthread_mutex_init(&thread->cancel_lock, NULL);
 
 	pthread_mutex_lock(&thread->cancel_lock);
 	thread->cancel_state = (1 << _PTHREAD_CANCEL_POS) & attr->flags;
@@ -166,7 +182,6 @@ int pthread_create(pthread_t *newthread, const pthread_attr_t *attr,
 
 	pthread_cond_init(&thread->state_cond, &cond_attr);
 	sys_slist_init(&thread->key_list);
-	pthread_num++;
 
 	*newthread = (pthread_t) k_thread_create(&thread->thread, attr->stack,
 						 attr->stacksize,

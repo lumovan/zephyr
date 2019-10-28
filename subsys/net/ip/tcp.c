@@ -24,7 +24,7 @@ LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
 #include <net/net_context.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 
 #include "connection.h"
 #include "net_private.h"
@@ -172,7 +172,9 @@ static inline u32_t retry_timeout(const struct net_tcp *tcp)
 	 ((IS_ENABLED(CONFIG_NET_L2_BT) &&				\
 	   net_pkt_lladdr_dst(pkt)->type == NET_LINK_BLUETOOTH) ||	\
 	  (IS_ENABLED(CONFIG_NET_L2_IEEE802154) &&			\
-	   net_pkt_lladdr_dst(pkt)->type == NET_LINK_IEEE802154)))
+	   net_pkt_lladdr_dst(pkt)->type == NET_LINK_IEEE802154) ||	\
+	  (IS_ENABLED(CONFIG_NET_L2_CANBUS) &&			\
+	   net_pkt_lladdr_dst(pkt)->type == NET_LINK_CANBUS)))
 
 /* The ref should not be done for Bluetooth and IEEE 802.15.4 which use
  * IPv6 header compression (6lo). For BT and 802.15.4 we copy the pkt
@@ -1101,7 +1103,7 @@ bool net_tcp_ack_received(struct net_context *ctx, u32_t ack)
 		/* Last sequence number in this packet. */
 		last_seq = sys_get_be32(tcp_hdr->seq) + seq_len - 1;
 
-		/* Ack number should be strictly greater to acknowleged numbers
+		/* Ack number should be strictly greater to acknowledged numbers
 		 * below it. For example, ack no. 10 acknowledges all numbers up
 		 * to and including 9.
 		 */

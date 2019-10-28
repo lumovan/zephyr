@@ -50,10 +50,17 @@ config I2C_MCUX_LPI2C
 
 endif # I2C
 
+if PWM
+
+config PWM_MCUX
+	default y if HAS_MCUX_PWM
+
+endif # PWM
+
 if NET_L2_ETHERNET
 
 config ETH_MCUX
-	def_bool y if HAS_MCUX_ENET
+	default y if HAS_MCUX_ENET
 
 endif # NET_L2_ETHERNET
 
@@ -63,6 +70,19 @@ config UART_MCUX_LPUART
 	default y if HAS_MCUX_LPUART
 
 endif # SERIAL
+
+if COUNTER
+
+config COUNTER_MCUX_GPT
+	default y if HAS_MCUX_GPT
+
+config COUNTER_MCUX_GPT1
+	default y if HAS_MCUX_GPT
+
+config COUNTER_MCUX_GPT2
+	default y if HAS_MCUX_GPT
+
+endif # COUNTER
 
 if SPI
 
@@ -74,10 +94,10 @@ endif # SPI
 if CODE_ITCM
 
 config FLASH_SIZE
-	default $(dt_int_val,DT_NXP_IMX_ITCM_0_SIZE,K)
+	default $(dt_int_val,DT_INST_0_NXP_IMX_ITCM_SIZE,K)
 
 config FLASH_BASE_ADDRESS
-	default $(dt_hex_val,DT_NXP_IMX_ITCM_0_BASE_ADDRESS)
+	default $(dt_hex_val,DT_INST_0_NXP_IMX_ITCM_BASE_ADDRESS)
 
 endif # CODE_ITCM
 
@@ -104,10 +124,10 @@ endif # CODE_FLEXSPI2
 if DATA_DTCM
 
 config SRAM_SIZE
-	default $(dt_int_val,DT_NXP_IMX_DTCM_0_SIZE,K)
+	default $(dt_int_val,DT_INST_0_NXP_IMX_DTCM_SIZE,K)
 
 config SRAM_BASE_ADDRESS
-	default $(dt_hex_val,DT_NXP_IMX_DTCM_0_BASE_ADDRESS)
+	default $(dt_hex_val,DT_INST_0_NXP_IMX_DTCM_BASE_ADDRESS)
 
 endif # DATA_DTCM
 
@@ -120,6 +140,13 @@ config SRAM_BASE_ADDRESS
 	default $(dt_hex_val,DT_MMIO_SRAM_80000000_BASE_ADDRESS)
 
 endif # DATA_SEMC
+
+if USB
+
+config USB_DC_NXP_EHCI
+	default y
+
+endif # USB
 
 source "soc/arm/nxp_imx/rt/Kconfig.defconfig.mimxrt*"
 

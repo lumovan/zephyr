@@ -148,7 +148,7 @@ config SCHED_CPU_MASK
 config MAIN_STACK_SIZE
 	int "Size of stack for initialization and main thread"
 	default 2048 if COVERAGE_GCOV
-	default 512 if ZTEST && !RISCV32
+	default 512 if ZTEST && !(RISCV || X86)
 	default 1024
 	help
 	  When the initialization is complete, the thread executing it then
@@ -161,7 +161,7 @@ config IDLE_STACK_SIZE
 	int "Size of stack for idle thread"
 	default 2048 if COVERAGE_GCOV
 	default 1024 if XTENSA
-	default 512 if RISCV32
+	default 512 if RISCV
 	default 320 if ARC || (ARM && CPU_HAS_FPU)
 	default 256
 	help
@@ -331,16 +331,6 @@ config BOOT_DELAY
 	  receive before it actually gets data. A similar effect can be
 	  achieved by waiting for DCD on the serial port--however, not
 	  all serial ports have DCD.
-
-config INT_LATENCY_BENCHMARK
-	bool "Interrupt latency metrics [EXPERIMENTAL]"
-	depends on ARCH="x86"
-	help
-	  This option enables the tracking of interrupt latency metrics;
-	  the exact set of metrics being tracked is board-dependent.
-	  Tracking begins when int_latency_init() is invoked by an application.
-	  The metrics are displayed (and a new sampling interval is started)
-	  each time int_latency_show() is called thereafter.
 
 config EXECUTION_BENCHMARKING
 	bool "Timing metrics"
@@ -539,9 +529,11 @@ config ARCH_HAS_CUSTOM_BUSY_WAIT
 
 config SYS_CLOCK_TICKS_PER_SEC
 	int "System tick frequency (in ticks/second)"
+	default 100 if QEMU_TARGET || SOC_POSIX
+	default 10000 if TICKLESS_CAPABLE
 	default 100
 	help
-	  This option specifies the frequency of the system clock in Hz.
+	  This option specifies the nominal frequency of the system clock in Hz.
 
 	  Depending on the choice made, an amount of possibly expensive math must
 	  occur when converting ticks to milliseconds and vice-versa. Some values
@@ -567,6 +559,8 @@ config SYS_CLOCK_TICKS_PER_SEC
 	  granularity, not necessarily the number or frequency of
 	  interrupts delivered to the kernel.
 
+	  A value of 0 completely disables timer support in the kernel.
+
 config SYS_CLOCK_HW_CYCLES_PER_SEC
 	int "System clock's h/w timer frequency"
 	help
@@ -575,10 +569,13 @@ config SYS_CLOCK_HW_CYCLES_PER_SEC
 	  and the user should generally avoid modifying it via the menu configuration.
 
 config SYS_CLOCK_EXISTS
-	def_bool (SYS_CLOCK_TICKS_PER_SEC != 0)
-	# omit prompt to signify a "hidden" option
+	bool "System clock exists and is enabled"
+	default y
 	help
 	  This option specifies that the kernel lacks timer support.
+	  Some device configurations can eliminate significant code if
+	  this is disabled.  Obviously timeout-related APIs will not
+	  work.
 
 config XIP
 	bool "Execute in place"
@@ -657,6 +654,7 @@ config EXECUTE_XOR_WRITE
 config STACK_POINTER_RANDOM
 	int "Initial stack pointer randomization bounds"
 	depends on !STACK_GROWS_UP
+	depends on TEST_RANDOM_GENERATOR || ENTROPY_HAS_DRIVER
 	default 0
 	help
 	  This option performs a limited form of Address Space Layout

@@ -53,8 +53,13 @@ set(EXTRA_KCONFIG_TARGET_COMMAND_FOR_menuconfig
   ${ZEPHYR_BASE}/scripts/kconfig/menuconfig.py
   )
 
+set(EXTRA_KCONFIG_TARGET_COMMAND_FOR_guiconfig
+  ${ZEPHYR_BASE}/scripts/kconfig/guiconfig.py
+  )
+
 foreach(kconfig_target
     menuconfig
+    guiconfig
     ${EXTRA_KCONFIG_TARGETS}
     )
   add_custom_target(
@@ -63,6 +68,7 @@ foreach(kconfig_target
     PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
     srctree=${ZEPHYR_BASE}
     KERNELVERSION=${KERNELVERSION}
+    ZEPHYR_BASE=${ZEPHYR_BASE}
     KCONFIG_CONFIG=${DOTCONFIG}
     ARCH=$ENV{ARCH}
     BOARD_DIR=$ENV{BOARD_DIR}
@@ -88,7 +94,7 @@ get_cmake_property(cache_variable_names CACHE_VARIABLES)
 foreach (name ${cache_variable_names})
   if("${name}" MATCHES "^CONFIG_")
     # When a cache variable starts with 'CONFIG_', it is assumed to be
-    # a CLI Kconfig symbol assignment.
+    # a Kconfig symbol assignment from the CMake command line.
     set(EXTRA_KCONFIG_OPTIONS
       "${EXTRA_KCONFIG_OPTIONS}\n${name}=${${name}}"
       )
@@ -111,6 +117,7 @@ set(
   merge_config_files
   ${BOARD_DEFCONFIG}
   ${CONF_FILE_AS_LIST}
+  ${shield_conf_files}
   ${OVERLAY_CONFIG_AS_LIST}
   ${EXTRA_KCONFIG_OPTIONS_FILE}
   ${config_files}

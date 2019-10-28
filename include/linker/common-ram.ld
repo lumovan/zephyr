@@ -8,6 +8,12 @@
 #if defined(CONFIG_GEN_ISR_TABLES) && defined(CONFIG_DYNAMIC_INTERRUPTS)
 	SECTION_DATA_PROLOGUE(sw_isr_table,,)
 	{
+		/*
+		 * Some arch requires an entry to be aligned to arch
+		 * specific boundary for using double word load
+		 * instruction.  See include/sw_isr_table.h.
+		 */
+		. = ALIGN(CONFIG_ARCH_SW_ISR_TABLE_ALIGN);
 		*(SW_ISR_TABLE)
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 #endif
@@ -33,9 +39,9 @@
 
 	SECTION_DATA_PROLOGUE(_static_thread_area,,SUBALIGN(4))
 	{
-		_static_thread_data_list_start = .;
-		KEEP(*(SORT_BY_NAME("._static_thread_data.static.*")))
-		_static_thread_data_list_end = .;
+		__static_thread_data_list_start = .;
+		KEEP(*(SORT_BY_NAME(".__static_thread_data.static.*")))
+		__static_thread_data_list_end = .;
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
 #ifdef CONFIG_USERSPACE
@@ -88,6 +94,8 @@
 	{
 		_k_queue_list_start = .;
 		KEEP(*("._k_queue.static.*"))
+		KEEP(*("._k_fifo.static.*"))
+		KEEP(*("._k_lifo.static.*"))
 		_k_queue_list_end = .;
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 

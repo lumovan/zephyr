@@ -1164,7 +1164,7 @@ static void netusb_interface_config(struct usb_desc_header *head,
 #endif
 }
 
-USBD_CFG_DATA_DEFINE(netusb) struct usb_cfg_data netusb_config = {
+USBD_CFG_DATA_DEFINE(primary, netusb) struct usb_cfg_data netusb_config = {
 	.usb_device_description = NULL,
 	.interface_config = netusb_interface_config,
 	.interface_descriptor = &rndis_cfg.if0,
@@ -1173,7 +1173,6 @@ USBD_CFG_DATA_DEFINE(netusb) struct usb_cfg_data netusb_config = {
 		.class_handler = rndis_class_handler,
 		.custom_handler = NULL,
 		.vendor_handler = NULL,
-		.payload_data = NULL,
 	},
 	.num_endpoints = ARRAY_SIZE(rndis_ep_data),
 	.endpoint = rndis_ep_data,

@@ -22,6 +22,8 @@ target hardware in the early phases of development.
 This board provides a few peripherals such as an Ethernet driver and UART.
 See `Peripherals`_ for more information.
 
+.. _native_posix_deps:
+
 Host system dependencies
 ========================
 
@@ -158,7 +160,7 @@ Run the zephyr.exe executable as you would any other Linux console application.
 
 .. code-block:: console
 
-   $ zephyr/zephyr.exe
+   $ ./build/zephyr/zephyr.exe
    # Press Ctrl+C to exit
 
 This executable accepts several command line options depending on the
@@ -166,7 +168,7 @@ compilation configuration.
 You can run it with the ``--help`` command line switch to get a list of
 available options::
 
-   $ zephyr/zephyr.exe --help
+   $ ./build/zephyr/zephyr.exe --help
 
 Note that the Zephyr kernel does not actually exit once the application is
 finished. It simply goes into the idle loop forever.
@@ -200,7 +202,7 @@ Address Sanitizer (ASan)
 
 You can also build Zephyr with `Address Sanitizer`_. To do this, set
 :option:`CONFIG_ASAN`, for example, in the application project file, or in the
-cmake command line invocation.
+``west build`` or ``cmake`` command line invocation.
 
 Note that you will need the ASan library installed in your system.
 In Debian/Ubuntu this is ``libasan1``.
@@ -533,11 +535,40 @@ The following peripherals are currently provided with this board:
 .. _SDL2:
    https://www.libsdl.org/download-2.0.php
 
-UART
-*****
+**Flash driver**:
+  A flash driver is provided that accesses all flash data through a binary file
+  on the host file system.
 
-This driver can be configured to either create and link the UART to a new
-pseudoterminal (i.e. ``/dev/pts<nbr>``), or to map the UART input and
+  The size of the flash device can be configured through the native POSIX board
+  device tree and the sector size is configurable via the Kconfig option
+  :option:`CONFIG_FLASH_NATIVE_POSIX_SECTOR_SIZE`. The sector size will only be
+  used to return flash page layout related information and no restrictions are
+  imposed by the driver based on the configured sector size. As such an erase
+  operation of arbitrary size will succeed on the emulated flash device.
+  Further the emulated device will not impose any write restriction that are
+  applicable for a regular flash device, including changing the state of a bit
+  from zero to one.
+
+  By default the binary data is located in the file *flash.bin* in the current
+  working directory. The location of this file can be changed through the
+  command line parameter *--flash*. The flash data will be stored in raw format
+  and the file will be truncated to match the size specified in the device tree
+  configuration. In case the file does not exists the driver will take care of
+  creating the file, else the existing file is used.
+
+  The flash content can be accessed from the host system, as explained in the
+  `Host based flash access`_ section.
+
+UART
+****
+
+This driver can be configured with :option:`CONFIG_UART_NATIVE_POSIX`
+to instantiate up to two UARTs. By default only one UART is enabled.
+With :option:`CONFIG_UART_NATIVE_POSIX_PORT_1_ENABLE`
+you can enable the second one.
+
+For the first UART, it can link it to a new
+pseudoterminal (i.e. ``/dev/pts<nbr>``), or map the UART input and
 output to the executable's ``stdin`` and ``stdout``.
 This is chosen by selecting either
 :option:`CONFIG_NATIVE_UART_0_ON_OWN_PTY` or
@@ -557,8 +588,8 @@ to it. This can be done, for example with the command::
 
 where ``/dev/<ttyn>`` should be replaced with the actual TTY device.
 
-You may also chose to automatically attach a terminal emulator to it by
-passing the command line option ``-attach_uart`` to the executable.
+You may also chose to automatically attach a terminal emulator to the first UART
+by passing the command line option ``-attach_uart`` to the executable.
 The command used for attaching to the new shell can be set with the command line
 option ``-attach_uart_cmd=<"cmd">``. Where the default command is given by
 :option:`CONFIG_NATIVE_UART_AUTOATTACH_DEFAULT_CMD`.
@@ -600,3 +631,38 @@ development by integrating more seamlessly with the host operating system:
   A backend/"bottom" for Zephyr's CTF tracing subsystem which writes the tracing
   data to a file in the host filesystem.
   More information can be found in :ref:`Common Tracing Format <ctf>`
+
+Host based flash access
+***********************
+
+If a flash device is present, the file system partitions on the flash
+device can be exposed through the host file system by enabling
+:option:`CONFIG_FUSE_FS_ACCESS`. This option enables a FUSE
+(File system in User space) layer that maps the Zephyr file system calls to
+the required UNIX file system calls, and provides access to the flash file
+system partitions with normal operating system commands such as ``cd``,
+``ls`` and ``mkdir``.
+
+By default the partitions are exposed through the directory *flash* in the
+current working directory. This directory can be changed via the command line
+option *--flash-mount*. As this directory operates as a mount point for FUSE
+you have to ensure that it exists before starting the native POSIX board.
+
+On exit, the native POSIX board application will take care of unmounting the
+directory. In the unfortunate case that the native POSIX board application
+crashes, you can cleanup the stale mount point by using the program
+``fusermount``::
+
+    $ fusermount -u flash
+
+Note that this feature requires a 32-bit version of the FUSE library, with a
+minimal version of 2.6, on the host system and ``pkg-config`` settings to
+correctly pickup the FUSE install path and compiler flags.
+
+On a Ubuntu 18.04 host system, for example, install the ``pkg-config`` and
+``libfuse-dev:i386`` packages, and configure the pkg-config search path with
+these commands::
+
+    $ sudo apt-get install pkg-config libfuse-dev:i386
+    $ export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
+

@@ -13,12 +13,12 @@
 #include <soc.h>
 #include <init.h>
 #include <device.h>
-#include <clock_control.h>
-#include <atomic.h>
+#include <drivers/clock_control.h>
+#include <sys/atomic.h>
 
-#include <misc/util.h>
-#include <misc/stack.h>
-#include <misc/byteorder.h>
+#include <sys/util.h>
+#include <debug/stack.h>
+#include <sys/byteorder.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
@@ -71,9 +71,12 @@ static s32_t hbuf_count;
 #endif
 
 /**
- * @brief Pull from memq_ll_rx and push up to Host thread recv_thread()
- *   via recv_fifo
+ * @brief Handover from Controller thread to Host thread
  * @details Execution context: Controller thread
+ *   Pull from memq_ll_rx and push up to Host thread recv_thread() via recv_fifo
+ * @param p1  Unused. Required to conform with Zephyr thread protoype
+ * @param p2  Unused. Required to conform with Zephyr thread protoype
+ * @param p3  Unused. Required to conform with Zephyr thread protoype
  */
 static void prio_recv_thread(void *p1, void *p2, void *p3)
 {
@@ -164,13 +167,13 @@ static inline struct net_buf *encode_node(struct node_rx_pdu *node_rx,
 		break;
 	}
 
-#if defined(CONFIG_BT_LL_SW)
+#if defined(CONFIG_BT_LL_SW_LEGACY)
 	{
 		extern u8_t radio_rx_fc_set(u16_t handle, u8_t fc);
 
 		radio_rx_fc_set(node_rx->hdr.handle, 0);
 	}
-#endif /* CONFIG_BT_LL_SW */
+#endif /* CONFIG_BT_LL_SW_LEGACY */
 
 	node_rx->hdr.next = NULL;
 	ll_rx_mem_release((void **)&node_rx);

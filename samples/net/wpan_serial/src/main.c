@@ -17,11 +17,11 @@ LOG_MODULE_REGISTER(net_wpan_serial_sample, LOG_LEVEL_DBG);
 
 #include <string.h>
 #include <device.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <zephyr.h>
 #include <stdio.h>
 
-#include <misc/printk.h>
+#include <sys/printk.h>
 
 #include <net/buf.h>
 
@@ -565,7 +565,7 @@ void main(void)
 	u32_t baudrate, dtr = 0U;
 	int ret;
 
-	dev = device_get_binding(CONFIG_CDC_ACM_PORT_NAME_0);
+	dev = device_get_binding("CDC_ACM_0");
 	if (!dev) {
 		LOG_ERR("CDC ACM device not found");
 		return;
@@ -575,8 +575,9 @@ void main(void)
 
 	while (1) {
 		uart_line_ctrl_get(dev, LINE_CTRL_DTR, &dtr);
-		if (dtr)
+		if (dtr) {
 			break;
+		}
 	}
 
 	uart_dev = dev;
@@ -584,10 +585,11 @@ void main(void)
 	LOG_DBG("DTR set, continue");
 
 	ret = uart_line_ctrl_get(dev, LINE_CTRL_BAUD_RATE, &baudrate);
-	if (ret)
+	if (ret) {
 		printk("Failed to get baudrate, ret code %d\n", ret);
-	else
+	} else {
 		printk("Baudrate detected: %d\n", baudrate);
+	}
 
 	LOG_INF("USB serial initialized");
 

@@ -152,6 +152,22 @@ do {                                                                    \
 #endif
 #define __unused __attribute__((__unused__))
 
+/* Builtins with availability that depend on the compiler version. */
+#if __GNUC__ >= 5
+#define HAS_BUILTIN___builtin_add_overflow 1
+#define HAS_BUILTIN___builtin_sub_overflow 1
+#define HAS_BUILTIN___builtin_mul_overflow 1
+#define HAS_BUILTIN___builtin_div_overflow 1
+#endif
+#if __GNUC__ >= 4
+#define HAS_BUILTIN___builtin_clz 1
+#define HAS_BUILTIN___builtin_clzl 1
+#define HAS_BUILTIN___builtin_clzll 1
+#define HAS_BUILTIN___builtin_ctz 1
+#define HAS_BUILTIN___builtin_ctzl 1
+#define HAS_BUILTIN___builtin_ctzll 1
+#endif
+
 /* Be *very* careful with this, you cannot filter out with -wno-deprecated,
  * which has implications for -Werror
  */
@@ -166,6 +182,11 @@ do {                                                                    \
 #if defined(CONFIG_ISA_THUMB2)
 
 #define FUNC_CODE() .thumb;
+#define FUNC_INSTR(a)
+
+#elif defined(CONFIG_ISA_ARM)
+
+#define FUNC_CODE() .code 32
 #define FUNC_INSTR(a)
 
 #else
@@ -192,7 +213,7 @@ do {                                                                    \
 
 #if defined(_ASMLANGUAGE) && !defined(_LINKER)
 
-#if defined(CONFIG_ARM) || defined(CONFIG_NIOS2) || defined(CONFIG_RISCV32) \
+#if defined(CONFIG_ARM) || defined(CONFIG_NIOS2) || defined(CONFIG_RISCV) \
 	|| defined(CONFIG_XTENSA)
 #define GTEXT(sym) .global sym; .type sym, %function
 #define GDATA(sym) .global sym; .type sym, %object
@@ -338,7 +359,7 @@ do {                                                                    \
 		",%0"                               \
 		"\n\t.type\t" #name ",@object" :  : "n"(value))
 
-#elif defined(CONFIG_NIOS2) || defined(CONFIG_RISCV32) || defined(CONFIG_XTENSA)
+#elif defined(CONFIG_NIOS2) || defined(CONFIG_RISCV) || defined(CONFIG_XTENSA)
 
 /* No special prefixes necessary for constants in this arch AFAICT */
 #define GEN_ABSOLUTE_SYM(name, value)		\

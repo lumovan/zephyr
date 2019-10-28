@@ -18,7 +18,7 @@ zephyr_library_sources_ifdef(
   crypto/crypto.c
   )
 
-if(CONFIG_BT_LL_SW)
+if(CONFIG_BT_LL_SW_LEGACY)
   zephyr_library_sources(
     ll_sw/ctrl.c
     ll_sw/ll.c
@@ -119,19 +119,19 @@ if(CONFIG_BT_LL_SW_SPLIT)
   endif()
   zephyr_library_sources_ifdef(
     CONFIG_BT_CTLR_FILTER
-    ll_sw/nordic/lll/lll_filter.c
+    ll_sw/ull_filter.c
     )
   zephyr_library_sources_ifdef(
     CONFIG_BT_HCI_MESH_EXT
     ll_sw/ll_mesh.c
     )
-  zephyr_library_sources_ifdef(
-    CONFIG_BT_CTLR_DTM
-    ll_sw/nordic/lll/lll_test.c
-    )
   if(CONFIG_BT_LLL_VENDOR_NORDIC)
     zephyr_library_include_directories(
       ll_sw/nordic/lll
+      )
+    zephyr_library_sources_ifdef(
+      CONFIG_BT_CTLR_DTM
+      ll_sw/nordic/lll/lll_test.c
       )
     zephyr_library_sources_ifdef(
       CONFIG_BT_CTLR_PROFILE_ISR
@@ -139,6 +139,11 @@ if(CONFIG_BT_LL_SW_SPLIT)
       )
   endif()
 endif()
+
+zephyr_library_sources_ifdef(
+  CONFIG_BT_CTLR_SETTINGS
+  ll_sw/ll_settings.c
+)
 
 zephyr_library_sources_ifdef(
   CONFIG_SOC_COMPATIBLE_NRF
@@ -158,6 +163,7 @@ zephyr_library_include_directories(
 if(CONFIG_SOC_COMPATIBLE_NRF)
   zephyr_library_include_directories(
     ll_sw/nordic
+    hci/nordic
     )
 endif()
 

@@ -8,9 +8,9 @@
 #include <init.h>
 #include <kernel.h>
 #include <soc.h>
-#include <arch/arm/cortex_m/mpu/arm_core_mpu_dev.h>
+#include "arm_core_mpu_dev.h"
 #include <arch/arm/cortex_m/mpu/arm_core_mpu.h>
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <linker/linker-defs.h>
 
 #define LOG_LEVEL CONFIG_MPU_LOG_LEVEL

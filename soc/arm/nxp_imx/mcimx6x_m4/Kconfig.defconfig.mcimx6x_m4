@@ -11,6 +11,9 @@ config SOC
 	string
 	default "mcimx6x"
 
+config FLOAT
+	default y
+
 if CLOCK_CONTROL
 
 config CLOCK_CONTROL_IMX_CCM
@@ -35,7 +38,7 @@ endif # SERIAL
 if IPM
 
 config IPM_IMX
-	def_bool y
+	default y
 
 endif # IPM
 

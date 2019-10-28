@@ -1,6 +1,8 @@
 ..
     Zephyr Project documentation master file
 
+.. _zephyr-home:
+
 Zephyr Project Documentation
 ############################
 
@@ -105,6 +107,7 @@ licensing, as described in :ref:`Zephyr_Licensing`.
 .. toctree::
    :maxdepth: 1
 
+   Documentation Home <self>
    introduction/index.rst
    getting_started/index.rst
    contribute/index.rst

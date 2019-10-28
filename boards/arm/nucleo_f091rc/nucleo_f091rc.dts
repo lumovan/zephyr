@@ -50,30 +50,30 @@
 	current-speed = <115200>;
 	pinctrl-0 = <&usart2_pins_a>;
 	pinctrl-names = "default";
-	status = "ok";
+	status = "okay";
 };
 
 arduino_i2c: &i2c1 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
 };
 
 &i2c2 {
-	status = "ok";
+	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
 };
 
 arduino_spi: &spi1 {
-	status = "ok";
+	status = "okay";
 };
 
 &spi2 {
-	status = "ok";
+	status = "okay";
 };
 
 
-&idwg {
-	status = "ok";
+&iwdg {
+	status = "okay";
 };
 
 &flash0 {
@@ -92,4 +92,8 @@ arduino_spi: &spi1 {
 			reg = <0x0003e800 0x00001800>;
 		};
 	};
+};
+
+&adc1 {
+	status = "okay";
 };

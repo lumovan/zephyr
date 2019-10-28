@@ -16,30 +16,22 @@
 
 #include <system.h>
 #include <arch/nios2/asm_inline.h>
+#include <arch/common/addr_types.h>
 #include <generated_dts_board.h>
 #include "nios2.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <arch/common/sys_io.h>
+#include <arch/common/ffs.h>
 
 #define STACK_ALIGN  4
-
-#define _NANO_ERR_CPU_EXCEPTION (0)     /* Any unhandled exception */
-#define _NANO_ERR_STACK_CHK_FAIL (2)    /* Stack corruption detected */
-#define _NANO_ERR_ALLOCATION_FAIL (3)   /* Kernel Allocation Failure */
-#define _NANO_ERR_SPURIOUS_INT (4)	/* Spurious interrupt */
-#define _NANO_ERR_KERNEL_OOPS (5)       /* Kernel oops (fatal to thread) */
-#define _NANO_ERR_KERNEL_PANIC (6)	/* Kernel panic (fatal to system) */
 
 #ifndef _ASMLANGUAGE
 #include <zephyr/types.h>
 #include <irq.h>
 #include <sw_isr_table.h>
 
-/* physical/virtual address types required by the kernel */
-typedef unsigned int paddr_t;
-typedef unsigned int vaddr_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * Configure a static interrupt.
@@ -124,6 +116,15 @@ static ALWAYS_INLINE void z_arch_irq_unlock(unsigned int key)
 #endif
 }
 
+/**
+ * Returns true if interrupts were unlocked prior to the
+ * z_arch_irq_lock() call that produced the key argument.
+ */
+static ALWAYS_INLINE bool z_arch_irq_unlocked(unsigned int key)
+{
+	return key & 1;
+}
+
 void z_arch_irq_enable(unsigned int irq);
 void z_arch_irq_disable(unsigned int irq);
 
@@ -148,14 +149,13 @@ struct __esf {
 	u32_t instr; /* Instruction being executed when exc occurred */
 };
 
-typedef struct __esf NANO_ESF;
-extern const NANO_ESF _default_esf;
+typedef struct __esf z_arch_esf_t;
 
 FUNC_NORETURN void z_SysFatalErrorHandler(unsigned int reason,
-					 const NANO_ESF *esf);
+					 const z_arch_esf_t *esf);
 
 FUNC_NORETURN void z_NanoFatalErrorHandler(unsigned int reason,
-					  const NANO_ESF *esf);
+					  const z_arch_esf_t *esf);
 
 enum nios2_exception_cause {
 	NIOS2_EXCEPTION_UNKNOWN                      = -1,
@@ -209,10 +209,10 @@ static ALWAYS_INLINE void arch_nop(void)
 	__asm__ volatile("nop");
 }
 
-#endif /* _ASMLANGUAGE */
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif /* _ASMLANGUAGE */
+
+#endif /* ZEPHYR_INCLUDE_ARCH_NIOS2_ARCH_H_ */

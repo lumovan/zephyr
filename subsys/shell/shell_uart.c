@@ -5,7 +5,7 @@
  */
 
 #include <shell/shell_uart.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <init.h>
 #include <logging/log.h>
 
@@ -21,7 +21,7 @@ LOG_MODULE_REGISTER(shell_uart);
 SHELL_UART_DEFINE(shell_transport_uart,
 		  CONFIG_SHELL_BACKEND_SERIAL_TX_RING_BUFFER_SIZE,
 		  CONFIG_SHELL_BACKEND_SERIAL_RX_RING_BUFFER_SIZE);
-SHELL_DEFINE(shell_uart, "uart:~$ ", &shell_transport_uart,
+SHELL_DEFINE(shell_uart, CONFIG_SHELL_PROMPT_UART, &shell_transport_uart,
 	     CONFIG_SHELL_BACKEND_SERIAL_LOG_MESSAGE_QUEUE_SIZE,
 	     CONFIG_SHELL_BACKEND_SERIAL_LOG_MESSAGE_QUEUE_TIMEOUT,
 	     SHELL_FLAG_OLF_CRLF);
@@ -53,9 +53,10 @@ static void uart_rx_handle(const struct shell_uart *sh_uart)
 					break;
 				}
 			}
+
 			rd_len -= i;
+			new_data = true;
 			if (rd_len) {
-				new_data = true;
 				for (u32_t j = 0; j < rd_len; j++) {
 					data[j] = data[i + j];
 				}

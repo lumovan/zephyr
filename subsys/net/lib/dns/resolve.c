@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(net_dns_resolve, CONFIG_DNS_RESOLVER_LOG_LEVEL);
 
 #include <net/net_ip.h>
 #include <net/net_pkt.h>
+#include <net/net_mgmt.h>
 #include <net/dns_resolve.h>
 #include "dns_pack.h"
 
@@ -196,6 +197,7 @@ int dns_resolve_init(struct dns_resolve_context *ctx, const char *servers[],
 	struct sockaddr *local_addr = NULL;
 	socklen_t addr_len = 0;
 	int i = 0, idx = 0;
+	struct net_if *iface;
 	int ret, count;
 
 	if (!ctx) {
@@ -222,8 +224,12 @@ int dns_resolve_init(struct dns_resolve_context *ctx, const char *servers[],
 
 			dns_postprocess_server(ctx, idx);
 
-			NET_DBG("[%d] %s", i, log_strdup(servers[i]));
-
+			NET_DBG("[%d] %s%s%s", i, log_strdup(servers[i]),
+				IS_ENABLED(CONFIG_MDNS_RESOLVER) ?
+				(ctx->servers[i].is_mdns ? " mDNS" : "") : "",
+				IS_ENABLED(CONFIG_LLMNR_RESOLVER) ?
+				(ctx->servers[i].is_llmnr ?
+							 " LLMNR" : "") : "");
 			idx++;
 		}
 	}
@@ -244,6 +250,11 @@ int dns_resolve_init(struct dns_resolve_context *ctx, const char *servers[],
 #if defined(CONFIG_NET_IPV6)
 			local_addr = (struct sockaddr *)&local_addr6;
 			addr_len = sizeof(struct sockaddr_in6);
+
+			if (IS_ENABLED(CONFIG_MDNS_RESOLVER) &&
+			    ctx->servers[i].is_mdns) {
+				local_addr6.sin6_port = htons(5353);
+			}
 #else
 			continue;
 #endif
@@ -253,6 +264,11 @@ int dns_resolve_init(struct dns_resolve_context *ctx, const char *servers[],
 #if defined(CONFIG_NET_IPV4)
 			local_addr = (struct sockaddr *)&local_addr4;
 			addr_len = sizeof(struct sockaddr_in);
+
+			if (IS_ENABLED(CONFIG_MDNS_RESOLVER) &&
+			    ctx->servers[i].is_mdns) {
+				local_addr4.sin_port = htons(5353);
+			}
 #else
 			continue;
 #endif
@@ -277,6 +293,25 @@ int dns_resolve_init(struct dns_resolve_context *ctx, const char *servers[],
 			NET_DBG("Cannot bind DNS context (%d)", ret);
 			return ret;
 		}
+
+		iface = net_context_get_iface(ctx->servers[i].net_ctx);
+
+		if (IS_ENABLED(CONFIG_NET_MGMT_EVENT_INFO)) {
+			net_mgmt_event_notify_with_info(
+				NET_EVENT_DNS_SERVER_ADD,
+				iface, (void *)&ctx->servers[i].dns_server,
+				sizeof(struct sockaddr));
+		} else {
+			net_mgmt_event_notify(NET_EVENT_DNS_SERVER_ADD, iface);
+		}
+
+#if defined(CONFIG_NET_IPV6)
+		local_addr6.sin6_port = 0;
+#endif
+
+#if defined(CONFIG_NET_IPV4)
+		local_addr4.sin_port = 0;
+#endif
 
 		count++;
 	}
@@ -378,14 +413,25 @@ static int dns_read(struct dns_resolve_context *ctx,
 	}
 
 	if (dns_header_qdcount(dns_msg.msg) != 1) {
-		ret = DNS_EAI_FAIL;
-		goto quit;
+		/* For mDNS (when dns_id == 0) the query count is 0 */
+		if (*dns_id > 0) {
+			ret = DNS_EAI_FAIL;
+			goto quit;
+		}
 	}
 
 	ret = dns_unpack_response_query(&dns_msg);
 	if (ret < 0) {
-		ret = DNS_EAI_FAIL;
-		goto quit;
+		/* Check mDNS like above */
+		if (*dns_id > 0) {
+			ret = DNS_EAI_FAIL;
+			goto quit;
+		}
+
+		/* mDNS responses to do not have the query part so the
+		 * answer starts immediately after the header.
+		 */
+		dns_msg.answer_offset = dns_msg.query_offset;
 	}
 
 	if (ctx->queries[query_idx].query_type == DNS_QUERY_TYPE_A) {
@@ -804,19 +850,9 @@ try_resolve:
 
 	ctx->queries[i].id = sys_rand32_get();
 
-	/* Do this immediately after calculating the Id so that the unit
-	 * test will work properly.
-	 */
-	if (dns_id) {
-		*dns_id = ctx->queries[i].id;
-
-		NET_DBG("DNS id will be %u", *dns_id);
-	}
-
-	mdns_query = false;
-
 	/* If mDNS is enabled, then send .local queries only to multicast
-	 * address.
+	 * address. For mDNS the id should be set to 0, see RFC 6762 ch. 18.1
+	 * for details.
 	 */
 	if (IS_ENABLED(CONFIG_MDNS_RESOLVER)) {
 		const char *ptr = strrchr(query, '.');
@@ -824,7 +860,18 @@ try_resolve:
 		/* Note that we memcmp() the \0 here too */
 		if (ptr && !memcmp(ptr, (const void *){ ".local" }, 7)) {
 			mdns_query = true;
+
+			ctx->queries[i].id = 0;
 		}
+	}
+
+	/* Do this immediately after calculating the Id so that the unit
+	 * test will work properly.
+	 */
+	if (dns_id) {
+		*dns_id = ctx->queries[i].id;
+
+		NET_DBG("DNS id will be %u", *dns_id);
 	}
 
 	for (j = 0; j < SERVER_COUNT; j++) {
@@ -914,6 +961,21 @@ int dns_resolve_close(struct dns_resolve_context *ctx)
 
 	for (i = 0; i < SERVER_COUNT; i++) {
 		if (ctx->servers[i].net_ctx) {
+			struct net_if *iface;
+
+			iface = net_context_get_iface(ctx->servers[i].net_ctx);
+
+			if (IS_ENABLED(CONFIG_NET_MGMT_EVENT_INFO)) {
+				net_mgmt_event_notify_with_info(
+					NET_EVENT_DNS_SERVER_DEL,
+					iface,
+					(void *)&ctx->servers[i].dns_server,
+					sizeof(struct sockaddr));
+			} else {
+				net_mgmt_event_notify(NET_EVENT_DNS_SERVER_DEL,
+						      iface);
+			}
+
 			net_context_put(ctx->servers[i].net_ctx);
 		}
 	}

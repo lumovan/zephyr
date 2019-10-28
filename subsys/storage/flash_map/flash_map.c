@@ -10,8 +10,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 #include <device.h>
-#include <flash_map.h>
-#include <flash.h>
+#include <storage/flash_map.h>
+#include <drivers/flash.h>
 #include <soc.h>
 #include <init.h>
 
@@ -39,6 +39,13 @@ static struct flash_area const *get_flash_area_from_id(int idx)
 	}
 
 	return NULL;
+}
+
+void flash_area_foreach(flash_area_cb_t user_cb, void *user_data)
+{
+	for (int i = 0; i < flash_map_entries; i++) {
+		user_cb(&flash_map[i], user_data);
+	}
 }
 
 int flash_area_open(u8_t id, const struct flash_area **fap)
@@ -132,6 +139,9 @@ flash_page_cb cb, struct layout_data *cb_data)
 	cb_data->status = 0;
 
 	flash_dev = device_get_binding(fa->fa_dev_name);
+	if (flash_dev == NULL) {
+		return -ENODEV;
+	}
 
 	flash_page_foreach(flash_dev, cb, cb_data);
 
@@ -173,7 +183,7 @@ int flash_area_read(const struct flash_area *fa, off_t off, void *dst,
 	struct device *dev;
 
 	if (!is_in_flash_area_bounds(fa, off, len)) {
-		return -1;
+		return -EINVAL;
 	}
 
 	dev = device_get_binding(fa->fa_dev_name);
@@ -188,7 +198,7 @@ int flash_area_write(const struct flash_area *fa, off_t off, const void *src,
 	int rc;
 
 	if (!is_in_flash_area_bounds(fa, off, len)) {
-		return -1;
+		return -EINVAL;
 	}
 
 	flash_dev = device_get_binding(fa->fa_dev_name);
@@ -212,7 +222,7 @@ int flash_area_erase(const struct flash_area *fa, off_t off, size_t len)
 	int rc;
 
 	if (!is_in_flash_area_bounds(fa, off, len)) {
-		return -1;
+		return -EINVAL;
 	}
 
 	flash_dev = device_get_binding(fa->fa_dev_name);

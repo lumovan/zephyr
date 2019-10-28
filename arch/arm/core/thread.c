@@ -85,13 +85,32 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 #endif /* CONFIG_THREAD_USERSPACE_LOCAL_DATA */
 #endif /* CONFIG_USERSPACE */
 
-#if CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT && CONFIG_USERSPACE
+#if defined(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT) \
+	&& defined(CONFIG_USERSPACE)
 	/* This is required to work-around the case where the thread
 	 * is created without using K_THREAD_STACK_SIZEOF() macro in
 	 * k_thread_create(). If K_THREAD_STACK_SIZEOF() is used, the
 	 * Guard size has already been take out of stackSize.
 	 */
 	stackSize -= MPU_GUARD_ALIGN_AND_SIZE;
+#endif
+
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING) \
+	&& defined(CONFIG_MPU_STACK_GUARD)
+	/* For a thread which intends to use the FP services, it is required to
+	 * allocate a wider MPU guard region, to always successfully detect an
+	 * overflow of the stack.
+	 *
+	 * Note that the wider MPU regions requires re-adjusting the stack_info
+	 * .start and .size.
+	 *
+	 */
+	if ((options & K_FP_REGS) != 0) {
+		pStackMem += MPU_GUARD_ALIGN_AND_SIZE_FLOAT
+			- MPU_GUARD_ALIGN_AND_SIZE;
+		stackSize -= MPU_GUARD_ALIGN_AND_SIZE_FLOAT
+			- MPU_GUARD_ALIGN_AND_SIZE;
+	}
 #endif
 	stackEnd = pStackMem + stackSize;
 
@@ -100,39 +119,50 @@ void z_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	z_new_thread_init(thread, pStackMem, stackSize, priority,
 			 options);
 
-	/* carve the thread entry struct from the "base" of the stack */
+	/* Carve the thread entry struct from the "base" of the stack
+	 *
+	 * The initial carved stack frame only needs to contain the basic
+	 * stack frame (state context), because no FP operations have been
+	 * performed yet for this thread.
+	 */
 	pInitCtx = (struct __esf *)(STACK_ROUND_DOWN(stackEnd -
-		(char *)top_of_stack_offset - sizeof(struct __esf)));
+		(char *)top_of_stack_offset - sizeof(struct __basic_sf)));
 
-#if CONFIG_USERSPACE
+#if defined(CONFIG_USERSPACE)
 	if ((options & K_USER) != 0) {
-		pInitCtx->pc = (u32_t)z_arch_user_mode_enter;
+		pInitCtx->basic.pc = (u32_t)z_arch_user_mode_enter;
 	} else {
-		pInitCtx->pc = (u32_t)z_thread_entry;
+		pInitCtx->basic.pc = (u32_t)z_thread_entry;
 	}
 #else
-	pInitCtx->pc = (u32_t)z_thread_entry;
+	pInitCtx->basic.pc = (u32_t)z_thread_entry;
 #endif
 
+#if defined(CONFIG_CPU_CORTEX_M)
 	/* force ARM mode by clearing LSB of address */
-	pInitCtx->pc &= 0xfffffffe;
-
-	pInitCtx->a1 = (u32_t)pEntry;
-	pInitCtx->a2 = (u32_t)parameter1;
-	pInitCtx->a3 = (u32_t)parameter2;
-	pInitCtx->a4 = (u32_t)parameter3;
-	pInitCtx->xpsr =
-		0x01000000UL; /* clear all, thumb bit is 1, even if RO */
-#ifdef CONFIG_FLOAT
-	pInitCtx->fpscr = (u32_t)0; /* clears FPU status/control register*/
+	pInitCtx->basic.pc &= 0xfffffffe;
 #endif
+
+	pInitCtx->basic.a1 = (u32_t)pEntry;
+	pInitCtx->basic.a2 = (u32_t)parameter1;
+	pInitCtx->basic.a3 = (u32_t)parameter2;
+	pInitCtx->basic.a4 = (u32_t)parameter3;
+	pInitCtx->basic.xpsr =
+		0x01000000UL; /* clear all, thumb bit is 1, even if RO */
 
 	thread->callee_saved.psp = (u32_t)pInitCtx;
+#if defined(CONFIG_CPU_CORTEX_R)
+	pInitCtx->basic.lr = (u32_t)pInitCtx->basic.pc;
+	thread->callee_saved.spsr = A_BIT | T_BIT | MODE_SYS;
+	thread->callee_saved.lr = (u32_t)pInitCtx->basic.pc;
+#endif
 	thread->arch.basepri = 0;
 
-#if CONFIG_USERSPACE
+#if defined(CONFIG_USERSPACE) || defined(CONFIG_FP_SHARING)
 	thread->arch.mode = 0;
+#if defined(CONFIG_USERSPACE)
 	thread->arch.priv_stack_start = 0;
+#endif
 #endif
 
 	/* swap_return_value can contain garbage */
@@ -152,6 +182,19 @@ FUNC_NORETURN void z_arch_user_mode_enter(k_thread_entry_t user_entry,
 	/* Set up privileged stack before entering user mode */
 	_current->arch.priv_stack_start =
 		(u32_t)z_priv_stack_find(_current->stack_obj);
+#if defined(CONFIG_MPU_STACK_GUARD)
+	/* Stack guard area reserved at the bottom of the thread's
+	 * privileged stack. Adjust the available (writable) stack
+	 * buffer area accordingly.
+	 */
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+	 _current->arch.priv_stack_start +=
+		(_current->base.user_options & K_FP_REGS) ?
+		MPU_GUARD_ALIGN_AND_SIZE_FLOAT : MPU_GUARD_ALIGN_AND_SIZE;
+#else
+	 _current->arch.priv_stack_start += MPU_GUARD_ALIGN_AND_SIZE;
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+#endif /* CONFIG_MPU_STACK_GUARD */
 
 	z_arm_userspace_enter(user_entry, p1, p2, p3,
 			     (u32_t)_current->stack_info.start,
@@ -202,13 +245,13 @@ void configure_builtin_stack_guard(struct k_thread *thread)
 
 #if defined(CONFIG_MPU_STACK_GUARD) || defined(CONFIG_USERSPACE)
 
-#define IS_MPU_GUARD_VIOLATION(guard_start, fault_addr, stack_ptr) \
-	(fault_addr == -EINVAL) ? \
+#define IS_MPU_GUARD_VIOLATION(guard_start, guard_len, fault_addr, stack_ptr) \
+	((fault_addr == -EINVAL) ? \
 	((fault_addr >= guard_start) && \
-	(fault_addr < (guard_start + MPU_GUARD_ALIGN_AND_SIZE)) && \
-	(stack_ptr < (guard_start + MPU_GUARD_ALIGN_AND_SIZE))) \
+	(fault_addr < (guard_start + guard_len)) && \
+	(stack_ptr < (guard_start + guard_len))) \
 	: \
-	(stack_ptr < (guard_start + MPU_GUARD_ALIGN_AND_SIZE))
+	(stack_ptr < (guard_start + guard_len)))
 
 /**
  * @brief Assess occurrence of current thread's stack corruption
@@ -254,17 +297,24 @@ u32_t z_check_thread_stack_fail(const u32_t fault_addr, const u32_t psp)
 		return 0;
 	}
 
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+	u32_t guard_len = (thread->base.user_options & K_FP_REGS) ?
+		MPU_GUARD_ALIGN_AND_SIZE_FLOAT : MPU_GUARD_ALIGN_AND_SIZE;
+#else
+	u32_t guard_len = MPU_GUARD_ALIGN_AND_SIZE;
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+
 #if defined(CONFIG_USERSPACE)
 	if (thread->arch.priv_stack_start) {
 		/* User thread */
 		if ((__get_CONTROL() & CONTROL_nPRIV_Msk) == 0) {
 			/* User thread in privilege mode */
 			if (IS_MPU_GUARD_VIOLATION(
-				thread->arch.priv_stack_start,
+				thread->arch.priv_stack_start - guard_len,
+					guard_len,
 				fault_addr, psp)) {
 				/* Thread's privilege stack corruption */
-				return thread->arch.priv_stack_start +
-					MPU_GUARD_ALIGN_AND_SIZE;
+				return thread->arch.priv_stack_start;
 			}
 		} else {
 			if (psp < (u32_t)thread->stack_obj) {
@@ -274,16 +324,17 @@ u32_t z_check_thread_stack_fail(const u32_t fault_addr, const u32_t psp)
 		}
 	} else {
 		/* Supervisor thread */
-		if (IS_MPU_GUARD_VIOLATION((u32_t)thread->stack_obj,
-			fault_addr, psp)) {
+		if (IS_MPU_GUARD_VIOLATION(thread->stack_info.start -
+				guard_len,
+				guard_len,
+				fault_addr, psp)) {
 			/* Supervisor thread stack corruption */
-			return (u32_t)thread->stack_obj +
-				MPU_GUARD_ALIGN_AND_SIZE;
+			return thread->stack_info.start;
 		}
 	}
 #else /* CONFIG_USERSPACE */
-	if (IS_MPU_GUARD_VIOLATION(thread->stack_info.start -
-			MPU_GUARD_ALIGN_AND_SIZE,
+	if (IS_MPU_GUARD_VIOLATION(thread->stack_info.start - guard_len,
+			guard_len,
 			fault_addr, psp)) {
 		/* Thread stack corruption */
 		return thread->stack_info.start;
@@ -293,3 +344,37 @@ u32_t z_check_thread_stack_fail(const u32_t fault_addr, const u32_t psp)
 	return 0;
 }
 #endif /* CONFIG_MPU_STACK_GUARD || CONFIG_USERSPACE */
+
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+int z_arch_float_disable(struct k_thread *thread)
+{
+	if (thread != _current) {
+		return -EINVAL;
+	}
+
+	if (z_is_in_isr()) {
+		return -EINVAL;
+	}
+
+	/* Disable all floating point capabilities for the thread */
+
+	/* K_FP_REG flag is used in SWAP and stack check fail. Locking
+	 * interrupts here prevents a possible context-switch or MPU
+	 * fault to take an outdated thread user_options flag into
+	 * account.
+	 */
+	int key = z_arch_irq_lock();
+
+	thread->base.user_options &= ~K_FP_REGS;
+
+	__set_CONTROL(__get_CONTROL() & (~CONTROL_FPCA_Msk));
+
+	/* No need to add an ISB barrier after setting the CONTROL
+	 * register; z_arch_irq_unlock() already adds one.
+	 */
+
+	z_arch_irq_unlock(key);
+
+	return 0;
+}
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */

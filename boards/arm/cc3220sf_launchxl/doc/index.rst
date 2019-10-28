@@ -59,7 +59,7 @@ driver support.
 +-----------+------------+-----------------------+
 | I2C       | on-chip    | i2c                   |
 +-----------+------------+-----------------------+
-| SPI_0     | on-chip    | WiFi host driver      |
+| SPI_0     | on-chip    | Wi-Fi host driver     |
 +-----------+------------+-----------------------+
 
 .. note::
@@ -142,27 +142,41 @@ Prerequisites:
 
    Download and install the latest `XDS-110 emulation package`_.
 
-   Follow the directions here to update the firmware:
-   http://software-dl.ti.com/ccs/esd/documents/xdsdebugprobes/emu_xds110.html#updating-the-xds110-firmware
+   Follow these `xds110 firmware update directions
+   <http://software-dl.ti.com/ccs/esd/documents/xdsdebugprobes/emu_xds110.html#updating-the-xds110-firmware>`_
 
    Note that the emulation package install may place the xdsdfu utility
-   in <install_dir>/ccs_base/common/uscif/xds110/.
+   in ``<install_dir>/ccs_base/common/uscif/xds110/``.
 
 #. Switch Jumper SOP[2..0] (J15) back to [001].
 
    Remove power from the board (disconnect USB cable) before switching jumpers.
 
-#. Install TI OpenOCD
+#. Install OpenOCD
 
-   Clone the TI OpenOCD git repository from: http://git.ti.com/sdo-emu/openocd.
-   Follow the instructions in the Release Notes in that repository to build
-   and install.
+   You can obtain OpenOCD by following these
+   :ref:`installing the latest Zephyr SDK instructions <zephyr_sdk>`.
 
-   Since the default TI OpenOCD installation is /usr/local/bin/,
-   and /usr/local/share/, you may want to backup any current openocd
-   installations there.
-   If you decide to change the default installation location, also update
-   the OPENOCD path variable in :zephyr_file:`boards/arm/cc3220sf_launchxl/board.cmake`.
+   After the installation, add the directory containing the OpenOCD executable
+   to your environment's PATH variable. For example, use this command in Linux:
+
+   .. code-block:: console
+
+      export PATH=$ZEPHYR_SDK_INSTALL_DIR/sysroots/x86_64-pokysdk-linux/usr/bin/openocd:$PATH
+
+   If you had previously installed TI OpenOCD, you can simply switch to use
+   the one in the Zephyr SDK. If for some reason you wish to continue to use
+   your TI OpenOCD installation, you can set the OPENOCD and
+   OPENOCD_DEFAULT_PATH variables in
+   :zephyr_file:`boards/arm/cc3220sf_launchxl/board.cmake` to point the build
+   to the paths of the OpenOCD binary and its scripts, before
+   including the common openocd.board.cmake file:
+
+   .. code-block:: none
+
+      set(OPENOCD "/usr/local/bin/openocd" CACHE FILEPATH "" FORCE)
+      set(OPENOCD_DEFAULT_PATH /usr/local/share/openocd/scripts)
+      include(${ZEPHYR_BASE}/boards/common/openocd.board.cmake)
 
 #. Ensure CONFIG_XIP=y (default) is set.
 
@@ -200,6 +214,12 @@ To see program output from UART0, connect a separate terminal window:
 
 Then press the reset button (SW1) on the board to run the program.
 
+When using OpenOCD from Zephyr SDK 0.10.3 to flash the device, you may notice
+the program hangs when starting the network processor on the device, if the
+program uses it. There is a known issue with how that version of OpenOCD
+resets the network processor. You would need to manually hit the reset button
+on the board to properly reset the device after flashing.
+
 Debugging
 =========
 
@@ -213,46 +233,46 @@ build target:
    :goals: debug
 
 
-WiFi Support
-************
+Wi-Fi Support
+*************
 
 The SimpleLink Host Driver, imported from the SimpleLink SDK, has been ported
 to Zephyr, and communicates over a dedicated SPI to the network co-processor.
-It is available as a Zephyr WiFi device driver in
+It is available as a Zephyr Wi-Fi device driver in
 :zephyr_file:`drivers/wifi/simplelink`.
 
 Usage:
 ======
 
 Set :option:`CONFIG_WIFI_SIMPLELINK` and :option:`CONFIG_WIFI` to ``y``
-to enable WiFi.
+to enable Wi-Fi.
 See :zephyr_file:`samples/net/wifi/boards/cc3220sf_launchxl.conf`.
 
 Provisioning:
 =============
 
-SimpleLink provides a few rather sophisticated WiFi provisioning methods.
+SimpleLink provides a few rather sophisticated Wi-Fi provisioning methods.
 To keep it simple for Zephyr development and demos, the SimpleLink
 "Fast Connect" policy is enabled, with one-shot scanning.
 This enables the cc3220sf_launchxl to automatically reconnect to the last
 good known access point (AP), without having to restart a scan, and
 re-specify the SSID and password.
 
-To connect to an AP, first run the Zephyr WiFi shell sample application,
+To connect to an AP, first run the Zephyr Wi-Fi shell sample application,
 and connect to a known AP with SSID and password.
 
 See :ref:`wifi_sample`
 
 Once the connection succeeds, the network co-processor keeps the AP identity in
-its persistent memory.  Newly loaded WiFi applications then need not explicitly
-execute any WiFi scan or connect operations, until the need to change to a new AP.
+its persistent memory.  Newly loaded Wi-Fi applications then need not explicitly
+execute any Wi-Fi scan or connect operations, until the need to change to a new AP.
 
 Secure Socket Offload
 *********************
 
-The SimpleLink WiFi driver provides socket operations to the Zephyr socket
+The SimpleLink Wi-Fi driver provides socket operations to the Zephyr socket
 offload point, enabling Zephyr BSD socket API calls to be directed to the
-SimpleLink WiFi driver, by setting :option:`CONFIG_NET_SOCKETS_OFFLOAD`
+SimpleLink Wi-Fi driver, by setting :option:`CONFIG_NET_SOCKETS_OFFLOAD`
 to ``y``.
 
 Secure socket (TLS) communication is handled as part of the socket APIs,
@@ -268,20 +288,13 @@ See :ref:`sockets-http-get` and
 :zephyr_file:`samples/net/sockets/http_get/boards/cc3220sf_launchxl.conf` for an
 example.
 
-See the document `Simplelink WiFi Certificates Handling`_ for details on
+See the document `Simplelink Wi-Fi Certificates Handling`_ for details on
 using the TI UniFlash tool for certificate programming.
 
 Limitations
 ***********
-The following features are not supported in Zephyr v1.14:
-
-- IPv6: While the hardware supports it, it has yet to be fully implemented
-  in the SimpleLink WiFi driver.
-- static IP address: It is not currently possible to set
-  :option:`CONFIG_NET_CONFIG_SETTINGS` to ``y`` and assign a static IP
-  address to the device via :option:`CONFIG_NET_CONFIG_MY_IPV4_ADDR`. DHCP
-  is automatically handled by the SimpleLink WiFi driver to obtain an
-  address dynamically.
+- While the hardware supports it, IPv6 has yet to be fully implemented
+  in the SimpleLink Wi-Fi device driver in Zephyr.
 
 References
 **********
@@ -313,5 +326,5 @@ CC32xx Wiki:
 ..  _XDS-110 emulation package:
    http://processors.wiki.ti.com/index.php/XDS_Emulation_Software_Package#XDS_Emulation_Software_.28emupack.29_Download
 
-..  _Simplelink WiFi Certificates Handling:
+..  _Simplelink Wi-Fi Certificates Handling:
    http://www.ti.com/lit/pdf/swpu332

@@ -19,7 +19,7 @@
 #include <linker/sections.h>
 #include <wait_q.h>
 #include <ksched.h>
-#include <misc/__assert.h>
+#include <sys/__assert.h>
 #include <syscall_handler.h>
 
 extern void z_thread_single_abort(struct k_thread *thread);
@@ -43,7 +43,19 @@ void z_impl_k_thread_abort(k_tid_t thread)
 	z_thread_single_abort(thread);
 	z_thread_monitor_exit(thread);
 
-	z_reschedule(&lock, key);
+	if (thread == _current && !z_is_in_isr()) {
+		z_swap(&lock, key);
+	} else {
+		/* Really, there's no good reason for this to be a
+		 * scheduling point if we aren't aborting _current (by
+		 * definition, no higher priority thread is runnable,
+		 * because we're running!).  But it always has been
+		 * and is thus part of our API, and we have tests that
+		 * rely on k_thread_abort() scheduling out of
+		 * cooperative threads.
+		 */
+		z_reschedule(&lock, key);
+	}
 }
 #endif
 

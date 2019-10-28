@@ -149,8 +149,8 @@ path.
 Follow the instructions in :ref:`opensda-jlink-onboard-debug-probe` to program
 the `OpenSDA J-Link FRDM-KL25Z Firmware`_.
 
-Add the argument ``-DOPENSDA_FW=jlink`` when you invoke ``cmake`` or ``west
-build`` to override the default runner from pyOCD to J-Link:
+Add the argument ``-DOPENSDA_FW=jlink`` when you invoke ``west build`` to
+override the default runner from pyOCD to J-Link:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world

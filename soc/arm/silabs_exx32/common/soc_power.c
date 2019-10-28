@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <zephyr.h>
-#include <power.h>
+#include <power/power.h>
 #include <em_emu.h>
 
 #include <logging/log.h>
@@ -53,7 +53,7 @@ void sys_set_power_state(enum power_states state)
 #endif /* CONFIG_HAS_SYS_POWER_STATE_SLEEP_3 */
 #endif /* CONFIG_SYS_POWER_SLEEP_STATES */
 	default:
-		LOG_ERR("Unsupported power state %u", state);
+		LOG_DBG("Unsupported power state %u", state);
 		break;
 	}
 

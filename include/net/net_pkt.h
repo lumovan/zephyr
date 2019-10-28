@@ -41,6 +41,8 @@ extern "C" {
  */
 
 struct net_context;
+struct canbus_net_isotp_tx_ctx;
+struct canbus_net_isotp_rx_ctx;
 
 
 /* buffer cursor used in net_pkt */
@@ -58,11 +60,18 @@ struct net_pkt_cursor {
  * net_pkt_clone() function.
  */
 struct net_pkt {
-	/** FIFO uses first 4 bytes itself, reserve space */
-	int _reserved;
-
-	/** Internal variable that is used when packet is sent */
-	struct k_work work;
+	union {
+		/** Internal variable that is used when packet is sent
+		 * or received.
+		 */
+		struct k_work work;
+		/** Socket layer will queue received net_pkt into a k_fifo.
+		 * Since this happens after consuming net_pkt's k_work on
+		 * RX path, it is then fine to have both attributes sharing
+		 * the same memory area.
+		 */
+		intptr_t sock_recv_fifo;
+	};
 
 	/** Slab pointer from where it belongs to */
 	struct k_mem_slab *slab;
@@ -88,10 +97,19 @@ struct net_pkt {
 	struct net_if *orig_iface; /* Original network interface */
 #endif
 
+#if defined(CONFIG_NET_PKT_TIMESTAMP) || defined(CONFIG_NET_PKT_TXTIME)
+	union {
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
-	/** Timestamp if available. */
-	struct net_ptp_time timestamp;
-#endif
+		/** Timestamp if available. */
+		struct net_ptp_time timestamp;
+#endif /* CONFIG_NET_PKT_TIMESTAMP */
+#if defined(CONFIG_NET_PKT_TXTIME)
+		/** Network packet TX time in the future (in nanoseconds) */
+		u64_t txtime;
+#endif /* CONFIG_NET_PKT_TXTIME */
+	};
+#endif /* CONFIG_NET_PKT_TIMESTAMP || CONFIG_NET_PKT_TXTIME */
+
 	/** Reference counter */
 	atomic_t atomic_ref;
 
@@ -142,6 +160,7 @@ struct net_pkt {
 					     * Note: family needs to be
 					     * AF_UNSPEC.
 					     */
+		u8_t ppp_msg           : 1; /* This is a PPP message */
 	};
 
 	union {
@@ -191,6 +210,12 @@ struct net_pkt {
 #if defined(CONFIG_IEEE802154)
 	u8_t ieee802154_rssi; /* Received Signal Strength Indication */
 	u8_t ieee802154_lqi;  /* Link Quality Indicator */
+#endif
+#if defined(CONFIG_NET_L2_CANBUS)
+	union {
+		struct canbus_isotp_tx_ctx *canbus_tx_ctx;
+		struct canbus_isotp_rx_ctx *canbus_rx_ctx;
+	};
 #endif
 	/* @endcond */
 };
@@ -692,6 +717,31 @@ static inline void net_pkt_set_timestamp(struct net_pkt *pkt,
 }
 #endif /* CONFIG_NET_PKT_TIMESTAMP */
 
+#if defined(CONFIG_NET_PKT_TXTIME)
+static inline u64_t net_pkt_txtime(struct net_pkt *pkt)
+{
+	return pkt->txtime;
+}
+
+static inline void net_pkt_set_txtime(struct net_pkt *pkt, u64_t txtime)
+{
+	pkt->txtime = txtime;
+}
+#else
+static inline u64_t net_pkt_txtime(struct net_pkt *pkt)
+{
+	ARG_UNUSED(pkt);
+
+	return 0;
+}
+
+static inline void net_pkt_set_txtime(struct net_pkt *pkt, u64_t txtime)
+{
+	ARG_UNUSED(pkt);
+	ARG_UNUSED(txtime);
+}
+#endif /* CONFIG_NET_PKT_TXTIME */
+
 static inline size_t net_pkt_get_len(struct net_pkt *pkt)
 {
 	return net_buf_frags_len(pkt->frags);
@@ -806,6 +856,33 @@ static inline void net_pkt_set_lldp(struct net_pkt *pkt, bool is_lldp)
 	ARG_UNUSED(is_lldp);
 }
 #endif /* CONFIG_NET_LLDP */
+
+#if defined(CONFIG_NET_PPP)
+static inline bool net_pkt_is_ppp(struct net_pkt *pkt)
+{
+	return pkt->ppp_msg;
+}
+
+static inline void net_pkt_set_ppp(struct net_pkt *pkt,
+				   bool is_ppp_msg)
+{
+	pkt->ppp_msg = is_ppp_msg;
+}
+#else /* CONFIG_NET_PPP */
+static inline bool net_pkt_is_ppp(struct net_pkt *pkt)
+{
+	ARG_UNUSED(pkt);
+
+	return false;
+}
+
+static inline void net_pkt_set_ppp(struct net_pkt *pkt,
+				   bool is_ppp_msg)
+{
+	ARG_UNUSED(pkt);
+	ARG_UNUSED(is_ppp_msg);
+}
+#endif /* CONFIG_NET_PPP */
 
 #define NET_IPV6_HDR(pkt) ((struct net_ipv6_hdr *)net_pkt_ip_data(pkt))
 #define NET_IPV4_HDR(pkt) ((struct net_ipv4_hdr *)net_pkt_ip_data(pkt))
@@ -1477,6 +1554,16 @@ int net_pkt_copy(struct net_pkt *pkt_dst,
 struct net_pkt *net_pkt_clone(struct net_pkt *pkt, s32_t timeout);
 
 /**
+ * @brief Clone pkt and increase the refcount of its buffer.
+ *
+ * @param pkt Original pkt to be shallow cloned
+ * @param timeout Timeout to wait for free packet
+ *
+ * @return NULL if error, cloned packet otherwise.
+ */
+struct net_pkt *net_pkt_shallow_clone(struct net_pkt *pkt, s32_t timeout);
+
+/**
  * @brief Read some data from a net_pkt
  *
  * @details net_pkt's cursor should be properly initialized and,
@@ -1510,6 +1597,20 @@ static inline int net_pkt_read_u8(struct net_pkt *pkt, u8_t *data)
  * @return 0 on success, negative errno code otherwise.
  */
 int net_pkt_read_be16(struct net_pkt *pkt, u16_t *data);
+
+/**
+ * @brief Read u16_t little endian data from a net_pkt
+ *
+ * @details net_pkt's cursor should be properly initialized and,
+ *          if needed, positioned using net_pkt_skip.
+ *          Cursor position will be updated after the operation.
+ *
+ * @param pkt  The network packet from where to read
+ * @param data The destination u16_t where to copy the data
+ *
+ * @return 0 on success, negative errno code otherwise.
+ */
+int net_pkt_read_le16(struct net_pkt *pkt, u16_t *data);
 
 /**
  * @brief Read u32_t big endian data from a net_pkt
@@ -1568,6 +1669,14 @@ static inline int net_pkt_write_le32(struct net_pkt *pkt, u32_t data)
 	u32_t data_le32 = sys_cpu_to_le32(data);
 
 	return net_pkt_write(pkt, &data_le32, sizeof(u32_t));
+}
+
+/* Write u16_t little endian data into a net_pkt. */
+static inline int net_pkt_write_le16(struct net_pkt *pkt, u16_t data)
+{
+	u16_t data_le16 = sys_cpu_to_le16(data);
+
+	return net_pkt_write(pkt, &data_le16, sizeof(u16_t));
 }
 
 /**

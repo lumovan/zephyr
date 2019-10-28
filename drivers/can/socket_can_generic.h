@@ -43,10 +43,12 @@ static inline void socket_can_iface_init(struct net_if *iface)
 	LOG_DBG("Init CAN interface %p dev %p", iface, dev);
 }
 
-static inline void tx_irq_callback(u32_t error_flags)
+static inline void tx_irq_callback(u32_t error_flags, void *arg)
 {
+	char *caller_str = (char *)arg;
 	if (error_flags) {
-		LOG_DBG("Callback! error-code: %d", error_flags);
+		LOG_DBG("TX error from %s! error-code: %d",
+			caller_str, error_flags);
 	}
 }
 
@@ -62,7 +64,7 @@ static inline int socket_can_send(struct device *dev, struct net_pkt *pkt)
 
 	ret = can_send(socket_context->can_dev,
 		       (struct zcan_frame *)pkt->frags->data,
-		       SEND_TIMEOUT, tx_irq_callback);
+		       SEND_TIMEOUT, tx_irq_callback, "socket_can_send");
 	if (ret) {
 		LOG_DBG("Cannot send socket CAN msg (%d)", ret);
 	}
@@ -78,6 +80,7 @@ static inline int socket_can_setsockopt(struct device *dev, void *obj,
 					const void *optval, socklen_t optlen)
 {
 	struct socket_can_context *socket_context = dev->driver_data;
+	struct net_context *ctx = obj;
 	int ret;
 
 	if (level != SOL_CAN_RAW && optname != CAN_RAW_FILTER) {
@@ -94,12 +97,22 @@ static inline int socket_can_setsockopt(struct device *dev, void *obj,
 		return -1;
 	}
 
+	net_context_set_filter_id(ctx, ret);
+
 	return 0;
+}
+
+static inline void socket_can_close(struct device *dev, int filter_id)
+{
+	struct socket_can_context *socket_context = dev->driver_data;
+
+	can_detach(socket_context->can_dev, filter_id);
 }
 
 static struct canbus_api socket_can_api = {
 	.iface_api.init = socket_can_iface_init,
 	.send = socket_can_send,
+	.close = socket_can_close,
 	.setsockopt = socket_can_setsockopt,
 };
 

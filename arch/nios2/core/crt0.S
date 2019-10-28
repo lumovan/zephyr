@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <arch/nios2/asm.h>
 #include <kernel_structs.h>
 
 /* exports */
@@ -135,7 +134,7 @@ SECTION_FUNC(TEXT, __start)
 #endif
 
 	/* TODO if shadow register sets enabled, interate through them to set
-	 * up. Need to clear r0, write gp, set the execption stack pointer
+	 * up. Need to clear r0, write gp, set the exception stack pointer
 	 * GH-1821
 	 */
 

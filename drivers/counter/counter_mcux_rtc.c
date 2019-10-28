@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <counter.h>
+#include <drivers/counter.h>
 #include <fsl_rtc.h>
 #include <logging/log.h>
 
@@ -101,7 +101,7 @@ static int mcux_rtc_set_alarm(struct device *dev, u8_t chan_id,
 		return -EBUSY;
 	}
 
-	if (!alarm_cfg->absolute) {
+	if ((alarm_cfg->flags & COUNTER_ALARM_CFG_ABSOLUTE) == 0) {
 		ticks += current;
 	}
 
@@ -133,20 +133,27 @@ static int mcux_rtc_cancel_alarm(struct device *dev, u8_t chan_id)
 	return 0;
 }
 
-static int mcux_rtc_set_top_value(struct device *dev, u32_t ticks,
-				  counter_top_callback_t callback,
-				  void *user_data)
+static int mcux_rtc_set_top_value(struct device *dev,
+				  const struct counter_top_cfg *cfg)
 {
 	const struct counter_config_info *info = dev->config->config_info;
+	const struct mcux_rtc_config *config =
+			CONTAINER_OF(info, struct mcux_rtc_config, info);
 	struct mcux_rtc_data *data = dev->driver_data;
 
-	if (ticks != info->max_top_value) {
-		LOG_ERR("Wrap can only be set to 0x%x", info->max_top_value);
+	if (cfg->ticks != info->max_top_value) {
+		LOG_ERR("Wrap can only be set to 0x%x.", info->max_top_value);
 		return -ENOTSUP;
 	}
 
-	data->top_callback = callback;
-	data->top_user_data = user_data;
+	if (!(cfg->flags & COUNTER_TOP_CFG_DONT_RESET)) {
+		RTC_StopTimer(config->base);
+		config->base->TSR = 0;
+		RTC_StartTimer(config->base);
+	}
+
+	data->top_callback = cfg->callback;
+	data->top_user_data = cfg->user_data;
 
 	return 0;
 }
@@ -181,13 +188,17 @@ static void mcux_rtc_isr(void *arg)
 	const struct mcux_rtc_config *config =
 		CONTAINER_OF(info, struct mcux_rtc_config, info);
 	struct mcux_rtc_data *data = dev->driver_data;
+	counter_alarm_callback_t cb;
 	u32_t current = mcux_rtc_read(dev);
+
 
 	LOG_DBG("Current time is %d ticks", current);
 
 	if ((RTC_GetStatusFlags(config->base) & RTC_SR_TAF_MASK) &&
 	    (data->alarm_callback)) {
-		data->alarm_callback(dev, 0, current, data->alarm_user_data);
+		cb = data->alarm_callback;
+		data->alarm_callback = NULL;
+		cb(dev, 0, current, data->alarm_user_data);
 	}
 
 	if ((RTC_GetStatusFlags(config->base) & RTC_SR_TOF_MASK) &&
@@ -252,9 +263,9 @@ static struct mcux_rtc_config mcux_rtc_config_0 = {
 	.irq_config_func = mcux_rtc_irq_config_0,
 	.info = {
 		.max_top_value = UINT32_MAX,
-		.freq = DT_NXP_KINETIS_RTC_0_CLOCK_FREQUENCY /
-				DT_NXP_KINETIS_RTC_0_PRESCALER,
-		.count_up = true,
+		.freq = DT_INST_0_NXP_KINETIS_RTC_CLOCK_FREQUENCY /
+				DT_INST_0_NXP_KINETIS_RTC_PRESCALER,
+		.flags = COUNTER_CONFIG_INFO_COUNT_UP,
 		.channels = 1,
 	},
 };

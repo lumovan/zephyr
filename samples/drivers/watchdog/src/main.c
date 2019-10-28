@@ -7,8 +7,8 @@
 
 #include <zephyr.h>
 #include <device.h>
-#include <watchdog.h>
-#include <misc/printk.h>
+#include <drivers/watchdog.h>
+#include <sys/printk.h>
 
 #define WDT_FEED_TRIES 5
 
@@ -54,6 +54,11 @@ void main(void)
 	wdt_config.callback = wdt_callback;
 
 	wdt_channel_id = wdt_install_timeout(wdt, &wdt_config);
+	if (wdt_channel_id == -ENOTSUP) {
+		/* IWDG driver for STM32 doesn't support callback */
+		wdt_config.callback = NULL;
+		wdt_channel_id = wdt_install_timeout(wdt, &wdt_config);
+	}
 	if (wdt_channel_id < 0) {
 		printk("Watchdog install error\n");
 		return;

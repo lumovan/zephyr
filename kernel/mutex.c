@@ -31,15 +31,12 @@
 #include <toolchain.h>
 #include <linker/sections.h>
 #include <wait_q.h>
-#include <misc/dlist.h>
+#include <sys/dlist.h>
 #include <debug/object_tracing_common.h>
 #include <errno.h>
 #include <init.h>
 #include <syscall_handler.h>
-#include <tracing.h>
-
-extern struct k_mutex _k_mutex_list_start[];
-extern struct k_mutex _k_mutex_list_end[];
+#include <debug/tracing.h>
 
 /* We use a global spinlock here because some of the synchronization
  * is protecting things like owner thread priorities which aren't
@@ -59,9 +56,7 @@ static int init_mutex_module(struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-	struct k_mutex *mutex;
-
-	for (mutex = _k_mutex_list_start; mutex < _k_mutex_list_end; mutex++) {
+	Z_STRUCT_SECTION_FOREACH(k_mutex, mutex) {
 		SYS_TRACING_OBJ_INIT(k_mutex, mutex);
 	}
 	return 0;
@@ -104,7 +99,7 @@ static s32_t new_prio_for_inheritance(s32_t target, s32_t limit)
 	return new_prio;
 }
 
-static void adjust_owner_prio(struct k_mutex *mutex, s32_t new_prio)
+static bool adjust_owner_prio(struct k_mutex *mutex, s32_t new_prio)
 {
 	if (mutex->owner->base.prio != new_prio) {
 
@@ -113,17 +108,19 @@ static void adjust_owner_prio(struct k_mutex *mutex, s32_t new_prio)
 			'y' : 'n',
 			new_prio, mutex->owner->base.prio);
 
-		z_thread_priority_set(mutex->owner, new_prio);
+		return z_set_prio(mutex->owner, new_prio);
 	}
+	return false;
 }
 
 int z_impl_k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 {
 	int new_prio;
 	k_spinlock_key_t key;
+	bool resched = false;
 
 	sys_trace_void(SYS_TRACE_ID_MUTEX_LOCK);
-	z_sched_lock();
+	key = k_spin_lock(&lock);
 
 	if (likely((mutex->lock_count == 0U) || (mutex->owner == _current))) {
 
@@ -138,14 +135,14 @@ int z_impl_k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 			_current, mutex, mutex->lock_count,
 			mutex->owner_orig_prio);
 
-		k_sched_unlock();
+		k_spin_unlock(&lock, key);
 		sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 
 		return 0;
 	}
 
 	if (unlikely(timeout == (s32_t)K_NO_WAIT)) {
-		k_sched_unlock();
+		k_spin_unlock(&lock, key);
 		sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 		return -EBUSY;
 	}
@@ -153,12 +150,10 @@ int z_impl_k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 	new_prio = new_prio_for_inheritance(_current->base.prio,
 					    mutex->owner->base.prio);
 
-	key = k_spin_lock(&lock);
-
 	K_DEBUG("adjusting prio up on mutex %p\n", mutex);
 
 	if (z_is_prio_higher(new_prio, mutex->owner->base.prio)) {
-		adjust_owner_prio(mutex, new_prio);
+		resched = adjust_owner_prio(mutex, new_prio);
 	}
 
 	int got_mutex = z_pend_curr(&lock, key, &mutex->wait_q, timeout);
@@ -169,7 +164,6 @@ int z_impl_k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 		got_mutex ? 'y' : 'n');
 
 	if (got_mutex == 0) {
-		k_sched_unlock();
 		sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 		return 0;
 	}
@@ -177,6 +171,8 @@ int z_impl_k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 	/* timed out */
 
 	K_DEBUG("%p timeout on mutex %p\n", _current, mutex);
+
+	key = k_spin_lock(&lock);
 
 	struct k_thread *waiter = z_waitq_head(&mutex->wait_q);
 
@@ -187,11 +183,13 @@ int z_impl_k_mutex_lock(struct k_mutex *mutex, s32_t timeout)
 
 	K_DEBUG("adjusting prio down on mutex %p\n", mutex);
 
-	key = k_spin_lock(&lock);
-	adjust_owner_prio(mutex, new_prio);
-	k_spin_unlock(&lock, key);
+	resched = adjust_owner_prio(mutex, new_prio) || resched;
 
-	k_sched_unlock();
+	if (resched) {
+		z_reschedule(&lock, key);
+	} else {
+		k_spin_unlock(&lock, key);
+	}
 
 	sys_trace_end_call(SYS_TRACE_ID_MUTEX_LOCK);
 	return -EAGAIN;

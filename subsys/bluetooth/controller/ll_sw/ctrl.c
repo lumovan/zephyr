@@ -11,14 +11,15 @@
 
 #include <soc.h>
 #include <device.h>
-#include <entropy.h>
-#include <clock_control.h>
+#include <drivers/entropy.h>
+#include <drivers/clock_control.h>
 #include <bluetooth/hci.h>
-#include <misc/util.h>
-#include <misc/byteorder.h>
+#include <sys/util.h>
+#include <sys/byteorder.h>
 
 #include "ll.h"
 #include "ll_feat.h"
+#include "ll_settings.h"
 
 #if defined(CONFIG_SOC_COMPATIBLE_NRF)
 #include <drivers/clock_control/nrf_clock_control.h>
@@ -569,7 +570,9 @@ void ll_reset(void)
 	_radio.fc_ack = _radio.fc_req;
 
 	/* reset whitelist and resolving list */
-	ll_filter_reset(false);
+	if (IS_ENABLED(CONFIG_BT_CTLR_FILTER)) {
+		ll_filter_reset(false);
+	}
 
 	/* memory allocations */
 	common_init();
@@ -653,11 +656,11 @@ static inline u32_t addr_us_get(u8_t phy)
 {
 	switch (phy) {
 	default:
-	case BIT(0):
+	case BIT(0): /* 1Mbps */
 		return 40;
-	case BIT(1):
+	case BIT(1): /* 2Mbps */
 		return 24;
-	case BIT(2):
+	case BIT(2): /* Coded */
 		return 376;
 	}
 }
@@ -965,6 +968,7 @@ static inline u32_t isr_rx_adv(u8_t devmatch_ok, u8_t devmatch_id,
 
 	if ((pdu_adv->type == PDU_ADV_TYPE_SCAN_REQ) &&
 	    (pdu_adv->len == sizeof(struct pdu_adv_scan_req)) &&
+	    (_pdu_adv->type != PDU_ADV_TYPE_DIRECT_IND) &&
 	    isr_adv_sr_check(_pdu_adv, pdu_adv, devmatch_ok, &rl_idx)) {
 
 #if defined(CONFIG_BT_CTLR_SCAN_REQ_NOTIFY)
@@ -1295,23 +1299,6 @@ static u32_t isr_rx_scan_report(u8_t rssi_ready, u8_t rl_idx, bool dir_report)
 	*extra = dir_report ? 1 : 0;
 	extra += PDU_AC_SIZE_SCFP;
 #endif /* CONFIG_BT_CTLR_EXT_SCAN_FP */
-#if defined(CONFIG_BT_HCI_MESH_EXT)
-	if (node_rx->hdr.type == NODE_RX_TYPE_MESH_REPORT) {
-		/* save the directed adv report flag */
-		*extra = _radio.scanner.chan - 1;
-		extra++;
-		sys_put_le32(_radio.ticks_anchor, extra);
-	}
-#endif /* CONFIG_BT_HCI_MESH_EXT */
-
-#if defined(CONFIG_BT_HCI_MESH_EXT)
-	if (node_rx->hdr.type == NODE_RX_TYPE_MESH_REPORT) {
-		/* save the directed adv report flag */
-		*extra = _radio.scanner.chan - 1;
-		extra++;
-		sys_put_le32(_radio.ticks_anchor, extra);
-	}
-#endif /* CONFIG_BT_HCI_MESH_EXT */
 
 #if defined(CONFIG_BT_HCI_MESH_EXT)
 	if (node_rx->hdr.type == NODE_RX_TYPE_MESH_REPORT) {
@@ -1517,7 +1504,7 @@ static inline u32_t isr_rx_scan(u8_t devmatch_ok, u8_t devmatch_id,
 		 * +/- half the 32KHz clock resolution. In order to achieve
 		 * a microsecond resolution, in the case of negative remainder,
 		 * the radio packet timer is started one 32KHz tick early,
-		 * hence substract one tick unit from the measurement of the
+		 * hence subtract one tick unit from the measurement of the
 		 * packet end.
 		 */
 		if (!_radio.remainder_anchor ||
@@ -3531,12 +3518,6 @@ static inline bool isr_rx_conn_enc_unexpected(struct connection *conn,
 		  (opcode != PDU_DATA_LLCTRL_TYPE_REJECT_EXT_IND)))) ||
 	       (conn->role &&
 		((!conn->refresh &&
-		  /* As a workaround to IOP with some old peer controllers that
-		   * respond with Unknown Rsp PDU to our local Slave Initiated
-		   * Feature request during Encryption Setup initiated by the
-		   * peer, we accept this Unknown Rsp PDU during the Encryption
-		   * setup procedure in progress.
-		   */
 		  (opcode != PDU_DATA_LLCTRL_TYPE_UNKNOWN_RSP) &&
 		  (opcode != PDU_DATA_LLCTRL_TYPE_TERMINATE_IND) &&
 		  (opcode != PDU_DATA_LLCTRL_TYPE_START_ENC_RSP) &&
@@ -5160,7 +5141,7 @@ static void k32src_wait(void)
 	done = true;
 
 	struct device *lf_clock = device_get_binding(
-		DT_NORDIC_NRF_CLOCK_0_LABEL "_32K");
+		DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_32K");
 
 	LL_ASSERT(lf_clock);
 
@@ -6670,18 +6651,16 @@ static void event_adv(u32_t ticks_at_expire, u32_t remainder,
 #endif /* CONFIG_BT_HCI_MESH_EXT */
 
 
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-	if (ctrl_rl_enabled()) {
+	/* Setup Radio Filter */
+	if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) && ctrl_rl_enabled()) {
 		struct ll_filter *filter =
 			ctrl_filter_get(!!(_radio.advertiser.filter_policy));
 
 		radio_filter_configure(filter->enable_bitmask,
 				       filter->addr_type_bitmask,
 				       (u8_t *)filter->bdaddr);
-	} else
-#endif /* CONFIG_BT_CTLR_PRIVACY */
-	/* Setup Radio Filter */
-	if (_radio.advertiser.filter_policy) {
+	} else if (IS_ENABLED(CONFIG_BT_CTLR_FILTER) &&
+		   _radio.advertiser.filter_policy) {
 
 		struct ll_filter *wl = ctrl_filter_get(true);
 
@@ -7081,8 +7060,8 @@ static void event_scan(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 	radio_pkt_rx_set(_radio.packet_rx[_radio.packet_rx_last]->pdu_data);
 	radio_rssi_measure();
 
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-	if (ctrl_rl_enabled()) {
+	/* Setup Radio Filter */
+	if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) && ctrl_rl_enabled()) {
 		struct ll_filter *filter =
 			ctrl_filter_get(!!(_radio.scanner.filter_policy & 0x1));
 		u8_t count, *irks = ctrl_irks_get(&count);
@@ -7092,11 +7071,8 @@ static void event_scan(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 				       (u8_t *)filter->bdaddr);
 
 		radio_ar_configure(count, irks);
-	} else
-#endif /* CONFIG_BT_CTLR_PRIVACY */
-	/* Setup Radio Filter */
-	if (_radio.scanner.filter_policy) {
-
+	} else if (IS_ENABLED(CONFIG_BT_CTLR_FILTER) &&
+		   _radio.scanner.filter_policy) {
 		struct ll_filter *wl = ctrl_filter_get(true);
 
 		radio_filter_configure(wl->enable_bitmask,
@@ -7322,10 +7298,6 @@ static inline u32_t event_conn_upd_prep(struct connection *conn,
 			conn->procedure_expire = 0U;
 		}
 #endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
-		/* Reset ticker_id_prepare as role is not continued further
-		 * due to conn update at this event.
-		 */
-		_radio.ticker_id_prepare = 0U;
 
 		/* reset mutex */
 		if (_radio.conn_upd == conn) {
@@ -7846,9 +7818,9 @@ static inline void event_vex_prep(struct connection *conn)
 			pdu_ctrl_tx->llctrl.version_ind.version_number =
 				LL_VERSION_NUMBER;
 			pdu_ctrl_tx->llctrl.version_ind.company_id =
-				CONFIG_BT_CTLR_COMPANY_ID;
+				ll_settings_company_id();
 			pdu_ctrl_tx->llctrl.version_ind.sub_version_number =
-				CONFIG_BT_CTLR_SUBVERSION_NUMBER;
+				ll_settings_subversion_number();
 
 			ctrl_tx_enqueue(conn, node_tx);
 
@@ -8833,8 +8805,13 @@ static void event_connection_prepare(u32_t ticks_at_expire,
 
 		switch (conn->llcp_type) {
 		case LLCP_CONN_UPD:
-			if (event_conn_upd_prep(conn, event_counter,
-						ticks_at_expire) == 0) {
+			if (!event_conn_upd_prep(conn, event_counter,
+						 ticks_at_expire)) {
+				/* Reset ticker_id_prepare as role is not
+				 * continued further due to conn update at
+				 * this event.
+				 */
+				_radio.ticker_id_prepare = 0U;
 				return;
 			}
 			break;
@@ -9917,7 +9894,7 @@ static void ctrl_tx_enqueue(struct connection *conn,
 		 * by peer, hence place this new ctrl after head
 		 */
 
-		/* if data transmited once, keep it at head of the tx list,
+		/* if data transmitted once, keep it at head of the tx list,
 		 * as we will insert a ctrl after it, hence advance the
 		 * data pointer
 		 */

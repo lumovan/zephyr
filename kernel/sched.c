@@ -11,7 +11,7 @@
 #include <kswap.h>
 #include <kernel_arch_func.h>
 #include <syscall_handler.h>
-#include <drivers/system_timer.h>
+#include <drivers/timer/system_timer.h>
 #include <stdbool.h>
 
 #if defined(CONFIG_SCHED_DUMB)
@@ -255,9 +255,10 @@ static void reset_time_slice(void)
 	 * slice count, as we'll see those "expired" ticks arrive in a
 	 * FUTURE z_time_slice() call.
 	 */
-	_current_cpu->slice_ticks = slice_time + z_clock_elapsed();
-
-	z_set_timeout_expiry(slice_time, false);
+	if (slice_time != 0) {
+		_current_cpu->slice_ticks = slice_time + z_clock_elapsed();
+		z_set_timeout_expiry(slice_time, false);
+	}
 }
 
 void k_sched_time_slice_set(s32_t slice, int prio)
@@ -476,7 +477,10 @@ void z_unpend_thread(struct k_thread *thread)
 	(void)z_abort_thread_timeout(thread);
 }
 
-void z_thread_priority_set(struct k_thread *thread, int prio)
+/* Priority set utility that does no rescheduling, it just changes the
+ * run queue state, returning true if a reschedule is needed later.
+ */
+bool z_set_prio(struct k_thread *thread, int prio)
 {
 	bool need_sched = 0;
 
@@ -484,15 +488,27 @@ void z_thread_priority_set(struct k_thread *thread, int prio)
 		need_sched = z_is_thread_ready(thread);
 
 		if (need_sched) {
-			_priq_run_remove(&_kernel.ready_q.runq, thread);
-			thread->base.prio = prio;
-			_priq_run_add(&_kernel.ready_q.runq, thread);
+			/* Don't requeue on SMP if it's the running thread */
+			if (!IS_ENABLED(CONFIG_SMP) || z_is_thread_queued(thread)) {
+				_priq_run_remove(&_kernel.ready_q.runq, thread);
+				thread->base.prio = prio;
+				_priq_run_add(&_kernel.ready_q.runq, thread);
+			} else {
+				thread->base.prio = prio;
+			}
 			update_cache(1);
 		} else {
 			thread->base.prio = prio;
 		}
 	}
 	sys_trace_thread_priority_set(thread);
+
+	return need_sched;
+}
+
+void z_thread_priority_set(struct k_thread *thread, int prio)
+{
+	bool need_sched = z_set_prio(thread, prio);
 
 	if (IS_ENABLED(CONFIG_SMP) &&
 	    !IS_ENABLED(CONFIG_SCHED_IPI_SUPPORTED)) {
@@ -504,7 +520,7 @@ void z_thread_priority_set(struct k_thread *thread, int prio)
 	}
 }
 
-static inline int resched(void)
+static inline int resched(u32_t key)
 {
 #ifdef CONFIG_SMP
 	if (!_current_cpu->swap_ok) {
@@ -513,12 +529,12 @@ static inline int resched(void)
 	_current_cpu->swap_ok = 0;
 #endif
 
-	return !z_is_in_isr();
+	return z_arch_irq_unlocked(key) && !z_is_in_isr();
 }
 
 void z_reschedule(struct k_spinlock *lock, k_spinlock_key_t key)
 {
-	if (resched()) {
+	if (resched(key.key)) {
 		z_swap(lock, key);
 	} else {
 		k_spin_unlock(lock, key);
@@ -527,7 +543,7 @@ void z_reschedule(struct k_spinlock *lock, k_spinlock_key_t key)
 
 void z_reschedule_irqlock(u32_t key)
 {
-	if (resched()) {
+	if (resched(key)) {
 		z_swap_irqlock(key);
 	} else {
 		irq_unlock(key);
@@ -549,7 +565,7 @@ void k_sched_unlock(void)
 
 	LOCKED(&sched_spinlock) {
 		++_current->base.sched_locked;
-		update_cache(1);
+		update_cache(0);
 	}
 
 	K_DEBUG("scheduler unlocked (%p:%d)\n",
@@ -914,23 +930,22 @@ void z_impl_k_yield(void)
 Z_SYSCALL_HANDLER0_SIMPLE_VOID(k_yield);
 #endif
 
-s32_t z_impl_k_sleep(s32_t duration)
+static s32_t z_tick_sleep(s32_t ticks)
 {
 #ifdef CONFIG_MULTITHREADING
 	u32_t expected_wakeup_time;
-	s32_t ticks;
 
 	__ASSERT(!z_is_in_isr(), "");
 
-	K_DEBUG("thread %p for %d ns\n", _current, duration);
+	K_DEBUG("thread %p for %d ticks\n", _current, ticks);
 
 	/* wait of 0 ms is treated as a 'yield' */
-	if (duration == 0) {
+	if (ticks == 0) {
 		k_yield();
 		return 0;
 	}
 
-	ticks = _TICK_ALIGN + z_ms_to_ticks(duration);
+	ticks += _TICK_ALIGN;
 	expected_wakeup_time = ticks + z_tick_get_32();
 
 	/* Spinlock purely for local interrupt locking to prevent us
@@ -953,17 +968,42 @@ s32_t z_impl_k_sleep(s32_t duration)
 
 	ticks = expected_wakeup_time - z_tick_get_32();
 	if (ticks > 0) {
-		return __ticks_to_ms(ticks);
+		return ticks;
 	}
 #endif
 
 	return 0;
 }
 
-#ifdef CONFIG_USERSPACE
-Z_SYSCALL_HANDLER(k_sleep, duration)
+s32_t z_impl_k_sleep(int ms)
 {
-	return z_impl_k_sleep(duration);
+	s32_t ticks;
+
+	ticks = z_ms_to_ticks(ms);
+	ticks = z_tick_sleep(ticks);
+	return __ticks_to_ms(ticks);
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_sleep, ms)
+{
+	return z_impl_k_sleep(ms);
+}
+#endif
+
+s32_t z_impl_k_usleep(int us)
+{
+	s32_t ticks;
+
+	ticks = z_us_to_ticks(us);
+	ticks = z_tick_sleep(ticks);
+	return __ticks_to_us(ticks);
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_usleep, us)
+{
+	return z_impl_k_usleep(us);
 }
 #endif
 

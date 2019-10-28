@@ -12,11 +12,11 @@
 #include <zephyr.h>
 
 #include <init.h>
-#include <uart.h>
-#include <misc/util.h>
-#include <misc/byteorder.h>
-#include <misc/stack.h>
-#include <misc/printk.h>
+#include <drivers/uart.h>
+#include <sys/util.h>
+#include <sys/byteorder.h>
+#include <debug/stack.h>
+#include <sys/printk.h>
 #include <string.h>
 
 #include <bluetooth/bluetooth.h>

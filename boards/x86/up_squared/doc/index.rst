@@ -18,120 +18,19 @@ a powerful and flexible Intel |reg| FPGA Altera MAX 10 onboard.
 
    Up Squared (Credit: https://up-board.org)
 
-This board configuration enables kernel support for the `UP Squared`_ board,
-along with the following devices:
-
-* High Precision Event Timer (HPET)
-
-* Serial Ports in Polling and Interrupt Driven Modes
-
-* GPIO
-
-* I2C
+This board configuration enables kernel support for the `UP Squared`_ board.
 
 .. note::
    This board configuration works on all three variants of `UP Squared`_
    boards containing Intel |reg| Pentium |trade| SoC,
    Intel |reg| Celeron |trade| SoC, or Intel |reg| Atom |trade| SoC.
 
-.. note::
-   This board configuration works only with the default BIOS settings.
-   Enabling/disabling LPSS devices in BIOS (under Advanced -> HAT Configurations)
-   will change the MMIO addresses of these devices, and will prevent
-   the drivers from communicating with these devices. For drivers that support
-   PCI enumeration, :option:`CONFIG_PCI` and :option:`CONFIG_PCI_ENUMERATION`
-   will allow these drivers to probe for the correct MMIO addresses.
-
 Hardware
 ********
 
 General information about the board can be found at the `UP Squared`_ website.
 
-Supported Features
-==================
-
-This board supports the following hardware features:
-
-* HPET
-
-* Advanced Programmed Interrupt Controller (APIC)
-
-* Serial Ports in Polling and Interrupt Driven Modes
-
-* GPIO
-
-* I2C
-
-+-----------+------------+-----------------------+-----------------+
-| Interface | Controller | Driver/Component      | PCI Enumeration |
-+===========+============+=======================+=================+
-| HPET      | on-chip    | system clock          | Not Supported   |
-+-----------+------------+-----------------------+-----------------+
-| APIC      | on-chip    | interrupt controller  | Not Supported   |
-+-----------+------------+-----------------------+-----------------+
-| UART      | on-chip    | serial port-polling;  | Supported       |
-|           |            | serial port-interrupt |                 |
-+-----------+------------+-----------------------+-----------------+
-| GPIO      | on-chip    | GPIO controller       | Not Supported   |
-+-----------+------------+-----------------------+-----------------+
-| I2C       | on-chip    | I2C controller        | Supported       |
-+-----------+------------+-----------------------+-----------------+
-
-The Zephyr kernel currently does not support other hardware features.
-
-Serial Port Polling Mode Support
---------------------------------
-
-The polling mode serial port allows debug output to be printed.
-
-Serial Port Interrupt Mode Support
-----------------------------------
-
-The interrupt mode serial port provides general serial communication
-and external communication.
-
-Interrupt Controller
---------------------
-
-This board uses the kernel's static Interrupt Descriptor Table (IDT) to program the
-Advanced Programmable Interrupt Controller (APIC) interrupt redirection table.
-
-
-+-----+---------+--------------------------+
-| IRQ | Remarks | Used by Zephyr Kernel    |
-+=====+=========+==========================+
-| 2   | HPET    | timer driver             |
-+-----+---------+--------------------------+
-| 4   | UART_0  | serial port when used in |
-|     |         | interrupt mode           |
-+-----+---------+--------------------------+
-| 5   | UART_1  | serial port when used in |
-|     |         | interrupt mode           |
-+-----+---------+--------------------------+
-| 14  | GPIO    | GPIO APL driver          |
-+-----+---------+--------------------------+
-| 27  | I2C_0   | I2C DW driver            |
-+-----+---------+--------------------------+
-| 28  | I2C_1   | I2C DW driver            |
-+-----+---------+--------------------------+
-| 29  | I2C_2   | I2C DW driver            |
-+-----+---------+--------------------------+
-| 30  | I2C_3   | I2C DW driver            |
-+-----+---------+--------------------------+
-| 31  | I2C_4   | I2C DW driver            |
-+-----+---------+--------------------------+
-| 32  | I2C_5   | I2C DW driver            |
-+-----+---------+--------------------------+
-| 33  | I2C_6   | I2C DW driver            |
-+-----+---------+--------------------------+
-| 34  | I2C_7   | I2C DW driver            |
-+-----+---------+--------------------------+
-
-HPET System Clock Support
--------------------------
-
-The SoC uses HPET timing with legacy-free timer support. The board
-configuration uses HPET as a system clock timer.
+.. include:: ../../../../soc/x86/apollo_lake/doc/supported_features.rst
 
 GPIO
 ----
@@ -151,12 +50,6 @@ Connections and IOs
 
 Refer to the `UP Squared`_ website and `UP Squared Pinout`_ website
 for connection diagrams.
-
-Memory Mappings
-===============
-
-This board configuration uses default hardware memory map
-addresses and sizes.
 
 Programming and Debugging
 *************************
@@ -208,7 +101,6 @@ Build Zephyr application
 
    .. zephyr-app-commands::
       :zephyr-app: samples/hello_world
-      :tool: all
       :board: up_squared
       :goals: build
 

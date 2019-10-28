@@ -12,14 +12,14 @@ if(${WEST} STREQUAL WEST-NOTFOUND)
   unset(WEST)
 endif()
 
-set(ZEPHYR_BASE $ENV{ZEPHYR_BASE})
+file(TO_CMAKE_PATH "$ENV{ZEPHYR_BASE}" ZEPHYR_BASE)
 
 message(STATUS "Zephyr base: ${ZEPHYR_BASE}")
-
-include(${ZEPHYR_BASE}/cmake/version.cmake)
-
-# Process modules
-include(${ZEPHYR_BASE}/cmake/zephyr_module.cmake)
+if(DEFINED WEST)
+  message(STATUS "West: ${WEST}")
+else()
+  message(STATUS "West: not found")
+endif()
 
 find_package(PythonInterp 3.4)
 set(DOXYGEN_SKIP_DOT True)
@@ -33,6 +33,11 @@ find_program(
 if(${SPHINXBUILD} STREQUAL SPHINXBUILD-NOTFOUND)
   message(FATAL_ERROR "The 'sphinx-build' command was not found. Make sure you have Sphinx installed.")
 endif()
+
+# Include version info
+include(${ZEPHYR_BASE}/cmake/version.cmake)
+# Process modules
+include(${ZEPHYR_BASE}/cmake/zephyr_module.cmake)
 
 # Note that this won't force fatal error if latexmk is not found.
 # Not having LaTeX tools should not prevent people from generating HTML docs.
@@ -99,6 +104,7 @@ configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
 # workaround for this limitation.
 set(EXTRACT_CONTENT_COMMAND
   ${CMAKE_COMMAND} -E env
+  ZEPHYR_BASE=${ZEPHYR_BASE}
   ${PYTHON_EXECUTABLE} scripts/extract_content.py
   # Ignore any files in the output directory.
   --ignore ${CMAKE_CURRENT_BINARY_DIR}
@@ -130,6 +136,7 @@ add_custom_target(
 file(GLOB_RECURSE  DOXY_SOURCES
   ${ZEPHYR_BASE}/include/*.[c,h,S]
   ${ZEPHYR_BASE}/lib/libc/*.[c,h,S]
+  ${ZEPHYR_BASE}/subsys/testsuite/ztest/include/*.[h,c,S]
   ${ZEPHYR_BASE}/tests/*.[h,c,S]
   )
 # For debug. Also find generated list in doc/_build/(build.ninja|CMakeFiles/)
@@ -187,6 +194,7 @@ add_custom_target(
   COMMAND ${CMAKE_COMMAND} -E make_directory ${RST_OUT}/doc/reference/kconfig
   COMMAND ${CMAKE_COMMAND} -E env
   PYTHONPATH="${ZEPHYR_BASE}/scripts/kconfig${SEP}$ENV{PYTHONPATH}"
+  ZEPHYR_BASE=${ZEPHYR_BASE}
   srctree=${ZEPHYR_BASE}
   KERNELVERSION=${KERNELVERSION}
   BOARD_DIR=boards/*/*/
@@ -212,6 +220,7 @@ set(CONF_DIR ${ZEPHYR_BASE}/.known-issues/doc)
 #
 set(SPHINX_BUILD_HTML_COMMAND
   ${CMAKE_COMMAND} -E env
+  ZEPHYR_BASE=${ZEPHYR_BASE}
   ZEPHYR_BUILD=${CMAKE_CURRENT_BINARY_DIR}
   ${SPHINXBUILD} -w ${SPHINX_LOG} -N -t ${DOC_TAG} -b html ${ALLSPHINXOPTS} ${RST_OUT}/doc ${SPHINX_OUTPUT_DIR_HTML})
 

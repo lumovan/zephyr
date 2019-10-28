@@ -119,21 +119,25 @@ def main():
                              'list`')
     parser.add_argument('-x', '--extra-modules', nargs='+',
                         help='List of extra modules to parse')
+    parser.add_argument('-w', '--west-path', default='west',
+                        help='Path to west executable')
     args = parser.parse_args()
 
     if args.modules is None:
-        p = subprocess.Popen(['west', 'list', '--format={posixpath}'],
+        p = subprocess.Popen([args.west_path, 'list', '--format={posixpath}'],
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
         out, err = p.communicate()
         if p.returncode == 0:
             projects = out.decode(sys.getdefaultencoding()).splitlines()
-        elif re.match(r'Error: .* is not in a west installation\..*',
+        elif re.match((r'Error: .* is not in a west installation\.'
+                        '|FATAL ERROR: no west installation found from .*'),
                       err.decode(sys.getdefaultencoding())):
             # Only accept the error from bootstrapper in the event we are
             # outside a west managed project.
             projects = []
         else:
+            print(err.decode(sys.getdefaultencoding()))
             # A real error occurred, raise an exception
             raise subprocess.CalledProcessError(cmd=p.args,
                                                 returncode=p.returncode)
@@ -144,10 +148,10 @@ def main():
         projects += args.extra_modules
 
     if args.kconfig_out:
-        kconfig_out_file = open(args.kconfig_out, 'w')
+        kconfig_out_file = open(args.kconfig_out, 'w', encoding="utf-8")
 
     if args.cmake_out:
-        cmake_out_file = open(args.cmake_out, 'w')
+        cmake_out_file = open(args.cmake_out, 'w', encoding="utf-8")
 
     try:
         for project in projects:

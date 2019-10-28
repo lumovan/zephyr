@@ -5,7 +5,7 @@
  */
 
 #include <ztest.h>
-#include <crc.h>
+#include <sys/crc.h>
 
 void test_crc32_ieee(void)
 {

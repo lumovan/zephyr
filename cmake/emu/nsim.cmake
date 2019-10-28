@@ -6,9 +6,11 @@ find_program(
   )
 
 if(${CONFIG_SOC_NSIM_EM})
- set(NSIM_PROPS nsim.props)
+ set(NSIM_PROPS nsim_em.props)
 elseif(${CONFIG_SOC_NSIM_SEM})
  set(NSIM_PROPS nsim_sem.props)
+elseif(${CONFIG_SOC_NSIM_HS})
+ set(NSIM_PROPS nsim_hs.props)
 endif()
 
 add_custom_target(run

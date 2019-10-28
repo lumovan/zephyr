@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include <counter.h>
+#include <drivers/counter.h>
 #include <nrfx_timer.h>
 
 #define LOG_LEVEL CONFIG_COUNTER_LOG_LEVEL
@@ -99,7 +99,7 @@ static inline u32_t counter_nrfx_get_cc_value(struct device *dev,
 	u32_t cc_val;
 	u32_t ticks = alarm_cfg->ticks;
 
-	if (alarm_cfg->absolute) {
+	if ((alarm_cfg->flags & COUNTER_ALARM_CFG_ABSOLUTE) != 0) {
 		return ticks;
 	}
 
@@ -156,13 +156,13 @@ static int counter_nrfx_cancel_alarm(struct device *dev, u8_t chan_id)
 }
 
 
-static int counter_nrfx_set_top_value(struct device *dev, u32_t ticks,
-				      counter_top_callback_t callback,
-				      void *user_data)
+static int counter_nrfx_set_top_value(struct device *dev,
+				      const struct counter_top_cfg *cfg)
 {
 	const struct counter_nrfx_config *nrfx_config = get_nrfx_config(dev);
 	const nrfx_timer_t *timer = &nrfx_config->timer;
 	struct counter_nrfx_data *data = get_dev_data(dev);
+	int err = 0;
 
 	for (int i = 0; i < counter_get_num_of_channels(dev); i++) {
 		/* Overflow can be changed only when all alarms are
@@ -174,15 +174,27 @@ static int counter_nrfx_set_top_value(struct device *dev, u32_t ticks,
 	}
 
 	nrfx_timer_compare_int_disable(timer, TOP_CH);
-	nrfx_timer_clear(timer);
 
-	data->top_cb = callback;
-	data->top_user_data = user_data;
+	data->top_cb = cfg->callback;
+	data->top_user_data = cfg->user_data;
 	nrfx_timer_extended_compare(timer, TOP_CH,
-				    ticks, COUNTER_OVERFLOW_SHORT,
-				    callback ? true : false);
+				    cfg->ticks, COUNTER_OVERFLOW_SHORT,
+				    false);
 
-	return 0;
+	if (!(cfg->flags & COUNTER_TOP_CFG_DONT_RESET)) {
+		nrfx_timer_clear(timer);
+	} else if (counter_nrfx_read(dev) >= cfg->ticks) {
+		err = -ETIME;
+		if (cfg->flags & COUNTER_TOP_CFG_RESET_WHEN_LATE) {
+			nrfx_timer_clear(timer);
+		}
+	}
+
+	if (cfg->callback) {
+		nrfx_timer_compare_int_enable(timer, TOP_CH);
+	}
+
+	return err;
 }
 
 static u32_t counter_nrfx_get_pending_int(struct device *dev)
@@ -252,13 +264,17 @@ static const struct counter_driver_api counter_nrfx_driver_api = {
 };
 
 #define COUNTER_NRFX_TIMER_DEVICE(idx)					       \
+	BUILD_ASSERT_MSG(DT_NORDIC_NRF_TIMER_TIMER_##idx##_PRESCALER <=	       \
+			TIMER_PRESCALER_PRESCALER_Msk,			       \
+			"TIMER prescaler out of range");		       \
 	static int counter_##idx##_init(struct device *dev)		       \
 	{								       \
-		IRQ_CONNECT(DT_NORDIC_NRF_TIMER_TIMER_##idx##_IRQ,	       \
-			    DT_NORDIC_NRF_TIMER_TIMER_##idx##_IRQ_PRIORITY,    \
+		IRQ_CONNECT(DT_NORDIC_NRF_TIMER_TIMER_##idx##_IRQ_0,	       \
+			    DT_NORDIC_NRF_TIMER_TIMER_##idx##_IRQ_0_PRIORITY,  \
 			    nrfx_isr, nrfx_timer_##idx##_irq_handler, 0);      \
 		const nrfx_timer_config_t config = {			       \
-			.frequency = CONFIG_COUNTER_TIMER##idx##_PRESCALER,    \
+			.frequency =					       \
+				DT_NORDIC_NRF_TIMER_TIMER_##idx##_PRESCALER,   \
 			.mode      = NRF_TIMER_MODE_TIMER,		       \
 			.bit_width = (TIMER##idx##_MAX_SIZE == 32) ?	       \
 					NRF_TIMER_BIT_WIDTH_32 :	       \
@@ -276,8 +292,8 @@ static const struct counter_driver_api counter_nrfx_driver_api = {
 			.max_top_value = (TIMER##idx##_MAX_SIZE == 32) ?       \
 					0xffffffff : 0x0000ffff,	       \
 			.freq = TIMER_CLOCK /				       \
-				(1 << CONFIG_COUNTER_TIMER##idx##_PRESCALER),  \
-			.count_up = true,				       \
+			   (1 << DT_NORDIC_NRF_TIMER_TIMER_##idx##_PRESCALER), \
+			.flags = COUNTER_CONFIG_INFO_COUNT_UP,		       \
 			.channels = CC_TO_ID(TIMER##idx##_CC_NUM),	       \
 		},							       \
 		.ch_data = counter##idx##_ch_data,			       \

@@ -10,7 +10,7 @@ The EFM32 Pearl Gecko Starter Kit EFM32PG-STK3402A contains an MCU from the
 EFM32PG family built on an ARM® Cortex®-M4F processor with excellent low
 power capabilities.
 
-.. figure:: ./efm32pg_stk3402a.png
+.. figure:: ./efm32pg_stk3402a.jpg
    :width: 375px
    :align: center
    :alt: EFM32PG-SLSTK3402A
@@ -47,6 +47,8 @@ The efm32pg_stk3402a board configuration supports the following hardware feature
 | NVIC      | on-chip    | nested vector interrupt controller  |
 +-----------+------------+-------------------------------------+
 | SYSTICK   | on-chip    | systick                             |
++-----------+------------+-------------------------------------+
+| COUNTER   | on-chip    | rtcc                                |
 +-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | flash memory                        |
 +-----------+------------+-------------------------------------+

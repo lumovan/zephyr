@@ -15,15 +15,15 @@
  */
 
 #include <soc.h>
-#include <clock_control.h>
-#include <system_timer.h>
+#include <drivers/clock_control.h>
+#include <drivers/timer/system_timer.h>
 #include <sys_clock.h>
 
 /* RTC registers. */
-#define RTC0 ((RtcMode0 *) DT_RTC_SAM0_BASE_ADDRESS)
+#define RTC0 ((RtcMode0 *) DT_INST_0_ATMEL_SAM0_RTC_BASE_ADDRESS)
 
 /* Number of sys timer cycles per on tick. */
-#define CYCLES_PER_TICK (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC \
+#define CYCLES_PER_TICK (SOC_ATMEL_SAM0_GCLK0_FREQ_HZ \
 			 / CONFIG_SYS_CLOCK_TICKS_PER_SEC)
 
 /* Maximum number of ticks. */
@@ -155,7 +155,7 @@ int z_clock_driver_init(struct device *device)
 	/* Set up bus clock and GCLK generator. */
 	PM->APBAMASK.reg |= PM_APBAMASK_RTC;
 	GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID(RTC_GCLK_ID) | GCLK_CLKCTRL_CLKEN
-			    | GCLK_GEN(DT_RTC_SAM0_CLOCK_GENERATOR);
+			    | GCLK_GEN(DT_INST_0_ATMEL_SAM0_RTC_CLOCK_GENERATOR);
 
 	while (GCLK->STATUS.bit.SYNCBUSY) {
 		/* Synchronize GCLK. */
@@ -191,9 +191,10 @@ int z_clock_driver_init(struct device *device)
 	RTC0->CTRL.reg |= RTC_MODE0_CTRL_ENABLE;
 
 	/* Enable RTC interrupt. */
-	NVIC_ClearPendingIRQ(DT_RTC_SAM0_IRQ);
-	IRQ_CONNECT(DT_RTC_SAM0_IRQ, DT_RTC_SAM0_IRQ_PRIORITY, rtc_isr, 0, 0);
-	irq_enable(DT_RTC_SAM0_IRQ);
+	NVIC_ClearPendingIRQ(DT_INST_0_ATMEL_SAM0_RTC_IRQ_0);
+	IRQ_CONNECT(DT_INST_0_ATMEL_SAM0_RTC_IRQ_0,
+		    DT_INST_0_ATMEL_SAM0_RTC_IRQ_0_PRIORITY, rtc_isr, 0, 0);
+	irq_enable(DT_INST_0_ATMEL_SAM0_RTC_IRQ_0);
 
 	return 0;
 }

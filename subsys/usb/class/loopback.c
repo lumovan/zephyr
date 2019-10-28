@@ -8,7 +8,7 @@
 
 #include <init.h>
 
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <usb/usb_device.h>
 #include <usb/usb_common.h>
 #include <usb_descriptor.h>
@@ -22,10 +22,6 @@ LOG_MODULE_REGISTER(usb_loopback);
 
 #define LOOPBACK_OUT_EP_IDX		0
 #define LOOPBACK_IN_EP_IDX		1
-
-#if !defined(CONFIG_USB_COMPOSITE_DEVICE)
-static u8_t interface_data[64];
-#endif
 
 static u8_t loopback_buf[1024];
 
@@ -146,12 +142,6 @@ static int loopback_vendor_handler(struct usb_setup_packet *setup,
 
 	if ((REQTYPE_GET_DIR(setup->bmRequestType) == REQTYPE_DIR_TO_HOST) &&
 	    (setup->bRequest == 0x5c)) {
-		if (setup->wLength > sizeof(loopback_buf)) {
-			return -ENOTSUP;
-		}
-
-		*data = loopback_buf;
-		*len = setup->wLength;
 		LOG_DBG("Device-to-Host, wLength %d, data %p",
 			setup->wLength, *data);
 		return 0;
@@ -170,7 +160,7 @@ static void loopback_interface_config(struct usb_desc_header *head,
 }
 
 /* usb.rst device config data start */
-USBD_CFG_DATA_DEFINE(loopback) struct usb_cfg_data loopback_config = {
+USBD_CFG_DATA_DEFINE(primary, loopback) struct usb_cfg_data loopback_config = {
 	.usb_device_description = NULL,
 	.interface_config = loopback_interface_config,
 	.interface_descriptor = &loopback_cfg.if0,
@@ -179,41 +169,8 @@ USBD_CFG_DATA_DEFINE(loopback) struct usb_cfg_data loopback_config = {
 		.class_handler = NULL,
 		.custom_handler = NULL,
 		.vendor_handler = loopback_vendor_handler,
-		.vendor_data = loopback_buf,
-		.payload_data = NULL,
 	},
 	.num_endpoints = ARRAY_SIZE(ep_cfg),
 	.endpoint = ep_cfg,
 };
 /* usb.rst device config data end */
-
-static int loopback_init(struct device *dev)
-{
-#ifndef CONFIG_USB_COMPOSITE_DEVICE
-	int ret;
-
-	loopback_config.interface.payload_data = interface_data;
-	loopback_config.usb_device_description = usb_get_device_descriptor();
-
-	/* usb.rst configure USB controller start */
-	ret = usb_set_config(&loopback_config);
-	if (ret < 0) {
-		LOG_ERR("Failed to config USB");
-		return ret;
-	}
-	/* usb.rst configure USB controller end */
-
-	/* usb.rst enable USB controller start */
-	ret = usb_enable(&loopback_config);
-	if (ret < 0) {
-		LOG_ERR("Failed to enable USB");
-		return ret;
-	}
-	/* usb.rst enable USB controller end */
-#endif
-	LOG_DBG("");
-
-	return 0;
-}
-
-SYS_INIT(loopback_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

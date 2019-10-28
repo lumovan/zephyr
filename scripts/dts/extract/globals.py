@@ -5,6 +5,12 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# NOTE: This file is part of the old device tree scripts, which will be removed
+# later. They are kept to generate some legacy #defines via the
+# --deprecated-only flag.
+#
+# The new scripts are gen_defines.py, edtlib.py, and dtlib.py.
+
 import sys
 
 from collections import defaultdict
@@ -18,17 +24,21 @@ defs = {}
 bindings = {}
 bus_bindings = {}
 binding_compats = []
+deprecated = []
+deprecated_main = []
 old_alias_names = False
 
 regs_config = {
     'zephyr,sram'  : 'DT_SRAM',
-    'zephyr,ccm'   : 'DT_CCM'
+    'zephyr,ccm'   : 'DT_CCM',
+    'zephyr,dtcm'  : 'DT_DTCM'
 }
 
 name_config = {
     'zephyr,console'     : 'DT_UART_CONSOLE_ON_DEV_NAME',
     'zephyr,shell-uart'  : 'DT_UART_SHELL_ON_DEV_NAME',
     'zephyr,bt-uart'     : 'DT_BT_UART_ON_DEV_NAME',
+    'zephyr,bt-c2h-uart' : 'DT_BT_C2H_UART_ON_DEV_NAME',
     'zephyr,uart-pipe'   : 'DT_UART_PIPE_ON_DEV_NAME',
     'zephyr,bt-mon-uart' : 'DT_BT_MONITOR_ON_DEV_NAME',
     'zephyr,uart-mcumgr' : 'DT_UART_MCUMGR_ON_DEV_NAME'
@@ -41,6 +51,8 @@ def str_to_label(s):
             .replace(',', '_') \
             .replace('@', '_') \
             .replace('/', '_') \
+            .replace('.', '_') \
+            .replace('+', 'PLUS') \
             .upper()
 
 
@@ -70,12 +82,6 @@ def create_aliases(root):
     if 'aliases' in root['children']:
         for name, node_path in root['children']['aliases']['props'].items():
             aliases[node_path].append(name)
-
-    # Treat alternate names as aliases
-    for node_path, node in reduced.items():
-        if 'alt_name' in node:
-            aliases[node_path].append(node['alt_name'])
-
 
 def get_compat(node_path):
     # Returns the value of the 'compatible' property for the node at
@@ -262,46 +268,63 @@ def enable_old_alias_names(enable):
     global old_alias_names
     old_alias_names = enable
 
-def add_compat_alias(node_path, label_postfix, label, prop_aliases):
+def add_compat_alias(node_path, label_postfix, label, prop_aliases, deprecate=False):
     if 'instance_id' in reduced[node_path]:
         instance = reduced[node_path]['instance_id']
         for k in instance:
             i = instance[k]
             b = 'DT_' + str_to_label(k) + '_' + str(i) + '_' + label_postfix
+            deprecated.append(b)
             prop_aliases[b] = label
+            b = "DT_INST_{}_{}_{}".format(str(i), str_to_label(k), label_postfix)
+            prop_aliases[b] = label
+            if deprecate:
+                deprecated.append(b)
 
 def add_prop_aliases(node_path,
-                     alias_label_function, prop_label, prop_aliases):
+                     alias_label_function, prop_label, prop_aliases, deprecate=False):
     node_compat = get_compat(node_path)
-    new_alias_prefix = 'DT_' + str_to_label(node_compat)
+    new_alias_prefix = 'DT_'
 
     for alias in aliases[node_path]:
         old_alias_label = alias_label_function(alias)
-        new_alias_label = new_alias_prefix + '_' + old_alias_label
+        new_alias_label = new_alias_prefix + 'ALIAS_' + old_alias_label
+        new_alias_compat_label = new_alias_prefix + str_to_label(node_compat) + '_' + old_alias_label
 
         if new_alias_label != prop_label:
             prop_aliases[new_alias_label] = prop_label
+            if deprecate:
+                deprecated.append(new_alias_label)
+        if new_alias_compat_label != prop_label:
+            prop_aliases[new_alias_compat_label] = prop_label
+            if deprecate:
+                deprecated.append(new_alias_compat_label)
         if old_alias_names and old_alias_label != prop_label:
             prop_aliases[old_alias_label] = prop_label
 
 def get_binding(node_path):
-    compat = get_compat(node_path)
-
-    # For just look for the binding in the main dict
-    # if we find it here, return it, otherwise it best
-    # be in the bus specific dict
-    if compat in bindings:
-        return bindings[compat]
+    compat = reduced[node_path]['props'].get('compatible')
+    if isinstance(compat, list):
+        compat = compat[0]
 
     parent_path = get_parent_path(node_path)
     parent_compat = get_compat(parent_path)
 
-    parent_binding = bindings[parent_compat]
+    if parent_compat in bindings:
+        parent_binding = bindings[parent_compat]
+        # see if we're a sub-node
+        if compat is None and 'sub-node' in parent_binding:
+            return parent_binding['sub-node']
 
-    bus = parent_binding['child']['bus']
-    binding = bus_bindings[bus][compat]
+        # look for a bus-specific binding
+        if 'child' in parent_binding and 'bus' in parent_binding['child']:
+            bus = parent_binding['child']['bus']
+            return bus_bindings[bus][compat]
 
-    return binding
+    # No bus-specific binding found, look in the main dict.
+    if compat:
+        return bindings[compat]
+    return None
 
 def get_binding_compats():
     return binding_compats
@@ -331,9 +354,56 @@ def build_cell_array(prop_array):
 
     return ret_array
 
+def child_to_parent_unmap(cell_parent, gpio_index):
+    # This function returns a (gpio-controller, pin number) tuple from
+    # cell_parent (identified as a 'nexus node', ie: has a 'gpio-map'
+    # property) and gpio_index.
+    # Note: Nexus nodes and gpio-map property are described in the
+    # upcoming (presumably v0.3) Device Tree specification, chapter
+    # 'Nexus nodes and Specifier Mapping'.
+
+    # First, retrieve gpio-map as a list
+    gpio_map = reduced[cell_parent]['props']['gpio-map']
+
+    # Before parsing, we need to know 'gpio-map' row size
+    # gpio-map raws are encoded as follows:
+    # [child specifier][gpio controller phandle][parent specifier]
+
+    # child specifier field length is connector property #gpio-cells
+    child_specifier_size = reduced[cell_parent]['props']['#gpio-cells']
+
+    # parent specifier field length is parent property #gpio-cells
+    # Assumption 1: We assume parent #gpio-cells is constant across
+    # the map, so we take the value of the first occurrence and apply
+    # to the whole map.
+    parent = phandles[gpio_map[child_specifier_size]]
+    parent_specifier_size = reduced[parent]['props']['#gpio-cells']
+
+    array_cell_size = child_specifier_size + 1 + parent_specifier_size
+
+    # Now that the length of each entry in 'gpio-map' is known,
+    # look for a match with gpio_index
+    for i in range(0, len(gpio_map), array_cell_size):
+        entry = gpio_map[i:i+array_cell_size]
+
+        if entry[0] == gpio_index:
+            parent_controller_phandle = entry[child_specifier_size]
+            # Assumption 2: We assume optional properties 'gpio-map-mask'
+            # and 'gpio-map-pass-thru' are not specified.
+            # So, for now, only the pin number (first value of the parent
+            # specifier field) should be returned.
+            parent_pin_number = entry[child_specifier_size+1]
+
+            # Return gpio_controller and specifier pin
+            return phandles[parent_controller_phandle], parent_pin_number
+
+    # gpio_index did not match any entry in the gpio-map
+    return None, None
+
 
 def extract_controller(node_path, prop, prop_values, index,
-                       def_label, generic, handle_single=False):
+                       def_label, generic, handle_single=False,
+                       deprecate=False):
 
     prop_def = {}
     prop_alias = {}
@@ -350,6 +420,15 @@ def extract_controller(node_path, prop, prop_values, index,
             continue
 
         cell_parent = phandles[elem[0]]
+
+        if 'gpio-map' in reduced[cell_parent]['props']:
+            # Parent is a gpio 'nexus node' (ie has gpio-map).
+            # Controller should be found in the map, using elem[1] as index.
+            # Pin attribues (number, flag) will not be used in this function
+            cell_parent, _ = child_to_parent_unmap(cell_parent, elem[1])
+            if cell_parent is None:
+                raise Exception("No parent matching child specifier")
+
         l_cell = reduced[cell_parent]['props'].get('label')
 
         if l_cell is None:
@@ -364,21 +443,11 @@ def extract_controller(node_path, prop, prop_values, index,
         else:
             l_idx = [str(i)]
 
-        # Check node generation requirements
-        try:
-            generation = get_binding(node_path)['properties'
-                    ][prop]['generation']
-        except:
-            generation = ''
-
-        if 'use-prop-name' in generation:
-            l_cellname = str_to_label(prop + '_' + 'controller')
-        else:
-            l_cellname = str_to_label(generic + '_' + 'controller')
+        l_cellname = str_to_label(generic + '_' + 'controller')
 
         label = l_base + [l_cellname] + l_idx
 
-        add_compat_alias(node_path, '_'.join(label[1:]), '_'.join(label), prop_alias)
+        add_compat_alias(node_path, '_'.join(label[1:]), '_'.join(label), prop_alias, deprecate)
         prop_def['_'.join(label)] = "\"" + l_cell + "\""
 
         #generate defs also if node is referenced as an alias in dts
@@ -387,13 +456,17 @@ def extract_controller(node_path, prop, prop_values, index,
                 node_path,
                 lambda alias: '_'.join([str_to_label(alias)] + label[1:]),
                 '_'.join(label),
-                prop_alias)
+                prop_alias, deprecate)
 
         insert_defs(node_path, prop_def, prop_alias)
 
+        if deprecate:
+            deprecated_main.extend(list(prop_def.keys()))
+
 
 def extract_cells(node_path, prop, prop_values, names, index,
-                  def_label, generic, handle_single=False):
+                  def_label, generic, handle_single=False,
+                  deprecate=False):
 
     prop_array = build_cell_array(prop_values)
     if handle_single:
@@ -407,6 +480,16 @@ def extract_cells(node_path, prop, prop_values, names, index,
             continue
 
         cell_parent = phandles[elem[0]]
+
+        if 'gpio-map' in reduced[cell_parent]['props']:
+            # Parent is a gpio connector ie 'nexus node', ie has gpio-map).
+            # Controller and pin number should be found in the connector map,
+            # using elem[1] as index.
+            # Parent pin flag is not used, so child flag(s) value (elem[2:])
+            # is kept as is.
+            cell_parent, elem[1] = child_to_parent_unmap(cell_parent, elem[1])
+            if cell_parent is None:
+                raise Exception("No parent matching child specifier")
 
         try:
             cell_yaml = get_binding(cell_parent)
@@ -427,16 +510,8 @@ def extract_cells(node_path, prop, prop_values, names, index,
                     cell_yaml_names = props
                 else:
                     cell_yaml_names = '#cells'
-        try:
-            generation = get_binding(node_path)['properties'][prop
-                    ]['generation']
-        except:
-            generation = ''
 
-        if 'use-prop-name' in generation:
-            l_cell = [str_to_label(str(prop))]
-        else:
-            l_cell = [str_to_label(str(generic))]
+        l_cell = [str_to_label(str(generic))]
 
         l_base = [def_label]
         # Check if #define should be indexed (_0, _1, ...)
@@ -458,7 +533,7 @@ def extract_cells(node_path, prop, prop_values, names, index,
             else:
                 label = l_base + l_cell + l_cellname + l_idx
             label_name = l_base + [name] + l_cellname
-            add_compat_alias(node_path, '_'.join(label[1:]), '_'.join(label), prop_alias)
+            add_compat_alias(node_path, '_'.join(label[1:]), '_'.join(label), prop_alias, deprecate)
             prop_def['_'.join(label)] = elem[j+1]
             if name:
                 prop_alias['_'.join(label_name)] = '_'.join(label)
@@ -469,9 +544,12 @@ def extract_cells(node_path, prop, prop_values, names, index,
                     node_path,
                     lambda alias: '_'.join([str_to_label(alias)] + label[1:]),
                     '_'.join(label),
-                    prop_alias)
+                    prop_alias, deprecate)
 
             insert_defs(node_path, prop_def, prop_alias)
+
+            if deprecate:
+                deprecated_main.extend(list(prop_def.keys()))
 
 
 def err(msg):

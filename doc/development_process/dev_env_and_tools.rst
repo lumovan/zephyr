@@ -1,4 +1,4 @@
-
+.. _dev-environment-and-tools:
 
 Development Environment and Tools
 #################################
@@ -268,13 +268,13 @@ To be discussed in a meeting
 ============================
 
 =============  ===============================================================
-Labels         ``API``, ``dev-review``, ``TSC``
+Labels         ``dev-review``, ``TSC``
 Applicable to  PRs  and issues
 Description    The issue is to be discussed in the following
-               `API/dev-review/TSC meeting`_ if time permits
+               `dev-review/TSC meeting`_ if time permits
 =============  ===============================================================
 
-.. _`API/dev-review/TSC meeting`: https://github.com/zephyrproject-rtos/zephyr/wiki/Zephyr-Committee-and-Working-Group-Meetings
+.. _`dev-review/TSC meeting`: https://github.com/zephyrproject-rtos/zephyr/wiki/Zephyr-Committee-and-Working-Group-Meetings
 
 Minimum PR review time
 ======================
@@ -294,7 +294,8 @@ Issue priority labels
 =============  ===============================================================
 Labels         ``priority:{high|medium|low}``
 Applicable to  Issues only
-Description    To classify the impact and importance of a bug or feature
+Description    To classify the impact and importance of a bug or
+               :ref:`feature <feature-tracking>`
 =============  ===============================================================
 
 Note: Issue priorities are generally set or changed during the bug-triage or TSC
@@ -347,9 +348,10 @@ Issue only labels
 ``Regression``       Something, which was working, but does not anymore
                      (bug subtype)
 ``Question``         This issue is a question to the Zephyr developers
-``Enhancement``      Changes/Updates/Additions to existing features
-``Feature request``  A request for a new feature
-``Feature``          A planned feature with a milestone
+``Enhancement``      Changes/Updates/Additions to existing
+                     :ref:`features <feature-tracking>`
+``Feature request``  A request for a new :ref:`feature <feature-tracking>`
+``Feature``          A :ref:`planned feature<feature-tracking>` with a milestone
 ``Duplicate``        This issue is a duplicate of another issue
                      (please specify)
 ``Good first issue`` Good for a first time contributor to take
@@ -357,5 +359,7 @@ Issue only labels
                      issues with additional information
 ==================== ===========================================================
 
-Any issue must be clasified and labeled as either ``Bug``, ``Question``,
-``Enhancement``, ``Feature``, or ``Feature Request``.
+Any issue must be classified and labeled as either ``Bug``, ``Question``,
+``Enhancement``, ``Feature``, or ``Feature Request``. More information on how
+feature requests are handled and become features can be found in
+:ref:`Feature Tracking<feature-tracking>`.

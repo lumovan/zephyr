@@ -10,9 +10,9 @@
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <misc/printk.h>
-#include <misc/util.h>
-#include <misc/byteorder.h>
+#include <sys/printk.h>
+#include <sys/util.h>
+#include <sys/byteorder.h>
 #include <zephyr.h>
 
 #include <bluetooth/bluetooth.h>
@@ -557,7 +557,7 @@ static ssize_t write_connectable(struct bt_conn *conn,
 }
 
 /* Eddystone Configuration Service Declaration */
-static struct bt_gatt_attr eds_attrs[] = {
+BT_GATT_SERVICE_DEFINE(eds_svc,
 	BT_GATT_PRIMARY_SERVICE(&eds_uuid),
 	/* Capabilities: Readable only when unlocked. Never writable. */
 	BT_GATT_CHARACTERISTIC(&eds_caps_uuid.uuid, BT_GATT_CHRC_READ,
@@ -615,9 +615,7 @@ static struct bt_gatt_attr eds_attrs[] = {
 			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
 			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
 			       read_connectable, write_connectable, NULL),
-};
-
-static struct bt_gatt_service eds_svc = BT_GATT_SERVICE(eds_attrs);
+);
 
 static void bt_ready(int err)
 {
@@ -627,8 +625,6 @@ static void bt_ready(int err)
 	}
 
 	printk("Bluetooth initialized\n");
-
-	bt_gatt_service_register(&eds_svc);
 
 	/* Start advertising */
 	err = bt_le_adv_start(BT_LE_ADV_CONN_NAME, ad, ARRAY_SIZE(ad), NULL, 0);
@@ -653,7 +649,7 @@ static void idle_timeout(struct k_work *work)
 static void connected(struct bt_conn *conn, u8_t err)
 {
 	if (err) {
-		printk("Connection failed (err %u)\n", err);
+		printk("Connection failed (err 0x%02x)\n", err);
 	} else {
 		printk("Connected\n");
 		k_delayed_work_cancel(&idle_work);
@@ -664,7 +660,7 @@ static void disconnected(struct bt_conn *conn, u8_t reason)
 {
 	struct eds_slot *slot = &eds_slots[eds_active_slot];
 
-	printk("Disconnected (reason %u)\n", reason);
+	printk("Disconnected (reason 0x%02x)\n", reason);
 
 	if (!slot->connectable) {
 		k_delayed_work_submit(&idle_work, 0);

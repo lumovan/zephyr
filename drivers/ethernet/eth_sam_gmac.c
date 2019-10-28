@@ -26,15 +26,15 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <kernel.h>
 #include <device.h>
-#include <misc/__assert.h>
-#include <misc/util.h>
+#include <sys/__assert.h>
+#include <sys/util.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <net/net_pkt.h>
 #include <net/net_if.h>
 #include <net/ethernet.h>
 #include <ethernet/eth_stats.h>
-#include <i2c.h>
+#include <drivers/i2c.h>
 #include <soc.h>
 #include "phy_sam_gmac.h"
 #include "eth_sam_gmac_priv.h"
@@ -1685,7 +1685,7 @@ static void eth0_iface_init(struct net_if *iface)
 
 	generate_mac(dev_data->mac_addr);
 
-	LOG_INF("MAC: %x:%x:%x:%x:%x:%x",
+	LOG_INF("MAC: %02x:%02x:%02x:%02x:%02x:%02x",
 		dev_data->mac_addr[0], dev_data->mac_addr[1],
 		dev_data->mac_addr[2], dev_data->mac_addr[3],
 		dev_data->mac_addr[4], dev_data->mac_addr[5]);

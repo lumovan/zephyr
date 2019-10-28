@@ -68,11 +68,11 @@
 #include "mbedtls/debug.h"
 
 #include <zephyr/types.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 
 #include "kernel.h"
 
-#include <misc/printk.h>
+#include <sys/printk.h>
 #define  MBEDTLS_PRINT ((int(*)(const char *, ...)) printk)
 
 static void my_debug(void *ctx, int level,
@@ -178,7 +178,7 @@ do {                                                                  \
 								      \
 	mbedtls_printf("%9lu KiB/s,  %9lu ns/byte\n",                 \
 		       ii * BUFSIZE / 1024,                           \
-		       delta / (jj * BUFSIZE));                       \
+		       (unsigned long)(delta / (jj * BUFSIZE)));      \
 } while (0)
 
 #if defined(MBEDTLS_MEMORY_BUFFER_ALLOC_C) && defined(MBEDTLS_MEMORY_DEBUG)
@@ -299,7 +299,9 @@ int main(int argc, char *argv[])
 	printk("\tMBEDTLS Benchmark sample\n");
 
 	mbedtls_debug_set_threshold(CONFIG_MBEDTLS_DEBUG_LEVEL);
+#if defined(MBEDTLS_PLATFORM_PRINTF_ALT)
 	mbedtls_platform_set_printf(MBEDTLS_PRINT);
+#endif
 	mbedtls_ssl_conf_dbg(&conf, my_debug, NULL);
 
 	k_delayed_work_init(&mbedtls_alarm, mbedtls_alarm_timeout);

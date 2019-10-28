@@ -8,23 +8,17 @@
 
 #include <logging/log_msg.h>
 #include <logging/log_instance.h>
-#include <misc/util.h>
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <syscall.h>
+#include <sys/util.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFUL
-#error "Logger does not support 64 bit architecture."
-#endif
-
-#if !CONFIG_LOG
+#ifndef CONFIG_LOG
 #define CONFIG_LOG_DEFAULT_LEVEL 0
 #define CONFIG_LOG_DOMAIN_ID 0
 #define CONFIG_LOG_MAX_LEVEL 0
@@ -185,22 +179,22 @@ extern "C" {
 	log_0(_str, _src_level)
 
 #define _LOG_INTERNAL_1(_src_level, _str, _arg0) \
-	log_1(_str, (u32_t)(_arg0), _src_level)
+	log_1(_str, (log_arg_t)(_arg0), _src_level)
 
 #define _LOG_INTERNAL_2(_src_level, _str, _arg0, _arg1)	\
-	log_2(_str, (u32_t)(_arg0), (u32_t)(_arg1), _src_level)
+	log_2(_str, (log_arg_t)(_arg0), (log_arg_t)(_arg1), _src_level)
 
 #define _LOG_INTERNAL_3(_src_level, _str, _arg0, _arg1, _arg2) \
-	log_3(_str, (u32_t)(_arg0), (u32_t)(_arg1), (u32_t)(_arg2), _src_level)
+	log_3(_str, (log_arg_t)(_arg0), (log_arg_t)(_arg1), (log_arg_t)(_arg2), _src_level)
 
-#define __LOG_ARG_CAST(_x) (u32_t)(_x),
+#define __LOG_ARG_CAST(_x) (log_arg_t)(_x),
 
 #define __LOG_ARGUMENTS(...) MACRO_MAP(__LOG_ARG_CAST, __VA_ARGS__)
 
-#define _LOG_INTERNAL_LONG(_src_level, _str, ...)		 \
-	do {							 \
-		u32_t args[] = {__LOG_ARGUMENTS(__VA_ARGS__)};	 \
-		log_n(_str, args, ARRAY_SIZE(args), _src_level); \
+#define _LOG_INTERNAL_LONG(_src_level, _str, ...)		  \
+	do {							  \
+		log_arg_t args[] = {__LOG_ARGUMENTS(__VA_ARGS__)};\
+		log_n(_str, args, ARRAY_SIZE(args), _src_level);  \
 	} while (false)
 
 #define Z_LOG_LEVEL_CHECK(_level, _check_level, _default_level) \
@@ -346,7 +340,7 @@ extern "C" {
 
 #define LOG_FILTER_FIRST_BACKEND_SLOT_IDX 1
 
-#if CONFIG_LOG_RUNTIME_FILTERING
+#ifdef CONFIG_LOG_RUNTIME_FILTERING
 #define LOG_RUNTIME_FILTER(_filter) \
 	LOG_FILTER_SLOT_GET(&(_filter)->filters, LOG_FILTER_AGGR_SLOT_IDX)
 #else
@@ -458,7 +452,7 @@ void log_0(const char *str, struct log_msg_ids src_level);
  * @param src_level	Log identification.
  */
 void log_1(const char *str,
-	   u32_t arg1,
+	   log_arg_t arg1,
 	   struct log_msg_ids src_level);
 
 /** @brief Standard log with two arguments.
@@ -469,8 +463,8 @@ void log_1(const char *str,
  * @param src_level	Log identification.
  */
 void log_2(const char *str,
-	   u32_t arg1,
-	   u32_t arg2,
+	   log_arg_t arg1,
+	   log_arg_t arg2,
 	   struct log_msg_ids src_level);
 
 /** @brief Standard log with three arguments.
@@ -482,9 +476,9 @@ void log_2(const char *str,
  * @param src_level	Log identification.
  */
 void log_3(const char *str,
-	   u32_t arg1,
-	   u32_t arg2,
-	   u32_t arg3,
+	   log_arg_t arg1,
+	   log_arg_t arg2,
+	   log_arg_t arg3,
 	   struct log_msg_ids src_level);
 
 /** @brief Standard log with arguments list.
@@ -495,7 +489,7 @@ void log_3(const char *str,
  * @param src_level	Log identification.
  */
 void log_n(const char *str,
-	   u32_t *args,
+	   log_arg_t *args,
 	   u32_t narg,
 	   struct log_msg_ids src_level);
 
@@ -560,13 +554,28 @@ void log_generic_from_user(struct log_msg_ids src_level,
  *
  * @return True if address within the pool, false otherwise.
  */
-bool log_is_strdup(void *buf);
+bool log_is_strdup(const void *buf);
 
 /** @brief Free allocated buffer.
  *
  * @param buf Buffer.
  */
 void log_free(void *buf);
+
+/**
+ * @brief Get maximal number of simultaneously allocated buffers for string
+ *	  duplicates.
+ *
+ * Value can be used to determine pool size.
+ */
+u32_t log_get_strdup_pool_utilization(void);
+
+/**
+ * @brief Get length of the longest string duplicated.
+ *
+ * Value can be used to determine buffer size in the string duplicates pool.
+ */
+u32_t log_get_strdup_longest_string(void);
 
 /** @brief Indicate to the log core that one log message has been dropped.
  */

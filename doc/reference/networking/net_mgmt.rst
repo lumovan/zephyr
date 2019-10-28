@@ -14,7 +14,7 @@ The Network Management APIs allow applications, as well as network
 layer code itself, to call defined network routines at any level in
 the IP stack, or receive notifications on relevant network events. For
 example, by using these APIs, code can request a scan be done on a
-WiFi- or Bluetooth-based network interface, or request notification if
+Wi-Fi- or Bluetooth-based network interface, or request notification if
 a network interface IP address changes.
 
 The Network Management API implementation is designed to save memory
@@ -47,7 +47,9 @@ Listening to network events
 
 You can receive notifications on network events by registering a
 callback function and specifying a set of events used to filter when
-your callback is invoked.
+your callback is invoked. The callback  will have to be unique for a
+pair of layer and code, whereas on the command part it will be a mask of
+events.
 
 Two functions are available, :cpp:func:`net_mgmt_add_event_callback()` for
 registering the callback function, and
@@ -99,8 +101,11 @@ An example follows.
 	void register_cb(void)
 	{
 		net_mgmt_init_event_callback(&callback, callback_handler, EVENT_SET);
-		netmgmt_add_event_callback(&callback);
+		net_mgmt_add_event_callback(&callback);
 	}
+
+See :zephyr_file:`include/net/net_event.h` for available generic core events that
+can be listened to.
 
 
 Defining a network management procedure
@@ -113,7 +118,7 @@ associated mgmt_request code.
 Management request code are defined in relevant places depending on
 the targeted layer or eventually, if l2 is the layer, on the
 technology as well. For instance, all IP layer management request code
-will be found in the :zephyr_file:`include/net/net_mgmt.h` header file. But in case
+will be found in the :zephyr_file:`include/net/net_event.h` header file. But in case
 of an L2 technology, let's say Ethernet, these would be found in
 :zephyr_file:`include/net/ethernet.h`
 

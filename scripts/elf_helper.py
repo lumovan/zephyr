@@ -38,6 +38,7 @@ DW_OP_fbreg = 0x91
 STACK_TYPE = "_k_thread_stack_element"
 thread_counter = 0
 sys_mutex_counter = 0
+futex_counter = 0
 
 # Global type environment. Populated by pass 1.
 type_env = {}
@@ -56,6 +57,7 @@ class KobjectInstance:
     def __init__(self, type_obj, addr):
         global thread_counter
         global sys_mutex_counter
+        global futex_counter
 
         self.addr = addr
         self.type_obj = type_obj
@@ -72,6 +74,9 @@ class KobjectInstance:
         elif self.type_obj.name == "sys_mutex":
             self.data = "(u32_t)(&kernel_mutexes[%d])" % sys_mutex_counter
             sys_mutex_counter += 1
+        elif self.type_obj.name == "k_futex":
+            self.data = "(u32_t)(&futex_data[%d])" % futex_counter
+            futex_counter += 1
         else:
             self.data = 0
 
@@ -326,9 +331,23 @@ def analyze_die_array(die):
         elements.append(ub.value + 1)
 
     if not elements:
+        if type_offset in type_env.keys():
+            mt = type_env[type_offset]
+            if mt.has_kobject():
+                if isinstance(mt, KobjectType) and mt.name == STACK_TYPE:
+                    elements.append(1)
+                    type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+    else:
+        type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+
+
+def analyze_typedef(die):
+    type_offset = die_get_type_offset(die)
+
+    if type_offset not in type_env.keys():
         return
 
-    type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+    type_env[die.offset] = type_env[type_offset]
 
 
 def addr_deref(elf, addr):
@@ -399,6 +418,8 @@ class ElfHelper:
                     analyze_die_const(die)
                 elif die.tag == "DW_TAG_array_type":
                     analyze_die_array(die)
+                elif die.tag == "DW_TAG_typedef":
+                    analyze_typedef(die)
                 elif die.tag == "DW_TAG_variable":
                     variables.append(die)
 
@@ -563,3 +584,6 @@ class ElfHelper:
 
     def get_sys_mutex_counter(self):
         return sys_mutex_counter
+
+    def get_futex_counter(self):
+        return futex_counter

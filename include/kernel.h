@@ -129,6 +129,7 @@ struct k_poll_event;
 struct k_poll_signal;
 struct k_mem_domain;
 struct k_mem_partition;
+struct k_futex;
 
 /* This enumeration needs to be kept in sync with the lists of kernel objects
  * and subsystems in scripts/gen_kobject_list.py, as well as the otype_to_str()
@@ -186,15 +187,15 @@ struct _k_object_assignment {
 #define K_THREAD_ACCESS_GRANT(name_, ...) \
 	static void * const _CONCAT(_object_list_, name_)[] = \
 		{ __VA_ARGS__, NULL }; \
-	static __used __in_section_unique(object_access) \
-		const struct _k_object_assignment \
-		_CONCAT(_object_access_, name_) = \
+	static const Z_STRUCT_SECTION_ITERABLE(_k_object_assignment, \
+					_CONCAT(_object_access_, name_)) = \
 			{ (&_k_thread_obj_ ## name_), \
 			  (_CONCAT(_object_list_, name_)) }
 
 #define K_OBJ_FLAG_INITIALIZED	BIT(0)
 #define K_OBJ_FLAG_PUBLIC	BIT(1)
 #define K_OBJ_FLAG_ALLOC	BIT(2)
+#define K_OBJ_FLAG_DRIVER	BIT(3)
 
 /**
  * Lookup a kernel object and init its metadata if it exists
@@ -254,7 +255,7 @@ static inline void k_object_access_all_grant(void *object)
 #endif /* !CONFIG_USERSPACE */
 
 /**
- * grant a thread access to a kernel object
+ * Grant a thread access to a kernel object
  *
  * The thread will be granted access to the object if the caller is from
  * supervisor mode, or the caller is from user mode AND has permissions
@@ -266,7 +267,7 @@ static inline void k_object_access_all_grant(void *object)
 __syscall void k_object_access_grant(void *object, struct k_thread *thread);
 
 /**
- * grant a thread access to a kernel object
+ * Revoke a thread's access to a kernel object
  *
  * The thread will lose access to the object if the caller is from
  * supervisor mode, or the caller is from user mode AND has permissions
@@ -281,7 +282,7 @@ void k_object_access_revoke(void *object, struct k_thread *thread);
 __syscall void k_object_release(void *object);
 
 /**
- * grant all present and future threads access to an object
+ * Grant all present and future threads access to an object
  *
  * If the caller is from supervisor mode, or the caller is from user mode and
  * have sufficient permissions on the object, then that object will have
@@ -350,7 +351,7 @@ static inline void k_obj_free(void *obj)
  * The purpose of this data type is to clearly distinguish between the
  * declared symbol for a stack (of type k_thread_stack_t) and the underlying
  * buffer which composes the stack data actually used by the underlying
- * thread; they cannot be used interchangably as some arches precede the
+ * thread; they cannot be used interchangeably as some arches precede the
  * stack buffer region with guard areas that trigger a MPU or MMU fault
  * if written to.
  *
@@ -480,7 +481,7 @@ struct _thread_stack_info {
 	/* Stack start - Represents the start address of the thread-writable
 	 * stack area.
 	 */
-	u32_t start;
+	uintptr_t start;
 
 	/* Stack Size - Thread writable stack buffer size. Represents
 	 * the size of the actual area, starting from the start member,
@@ -516,8 +517,6 @@ struct k_thread {
 
 	struct _thread_base base;
 
-	/** defined by the architecture, but all archs need these */
-	struct _caller_saved caller_saved;
 	/** defined by the architecture, but all archs need these */
 	struct _callee_saved callee_saved;
 
@@ -795,16 +794,30 @@ void k_thread_system_pool_assign(struct k_thread *thread);
 /**
  * @brief Put the current thread to sleep.
  *
- * This routine puts the current thread to sleep for @a duration
- * milliseconds.
+ * This routine puts the current thread to sleep for @a duration milliseconds.
  *
- * @param duration Number of milliseconds to sleep.
+ * @param ms Number of milliseconds to sleep.
  *
  * @return Zero if the requested time has elapsed or the number of milliseconds
  * left to sleep, if thread was woken up by \ref k_wakeup call.
- *
  */
-__syscall s32_t k_sleep(s32_t duration);
+__syscall s32_t k_sleep(s32_t ms);
+
+/**
+ * @brief Put the current thread to sleep with microsecond resolution.
+ *
+ * This function is unlikely to work as expected without kernel tuning.
+ * In particular, because the lower bound on the duration of a sleep is
+ * the duration of a tick, CONFIG_SYS_CLOCK_TICKS_PER_SEC must be adjusted
+ * to achieve the resolution desired. The implications of doing this must
+ * be understood before attempting to use k_usleep(). Use with caution.
+ *
+ * @param us Number of microseconds to sleep.
+ *
+ * @return Zero if the requested time has elapsed or the number of microseconds
+ * left to sleep, if thread was woken up by \ref k_wakeup call.
+ */
+__syscall s32_t k_usleep(s32_t us);
 
 /**
  * @brief Cause the current thread to busy wait.
@@ -959,9 +972,8 @@ struct _static_thread_data {
 			entry, p1, p2, p3,                               \
 			prio, options, delay)                            \
 	K_THREAD_STACK_DEFINE(_k_thread_stack_##name, stack_size);	 \
-	struct k_thread _k_thread_obj_##name;			 \
-	struct _static_thread_data _k_thread_data_##name __aligned(4)    \
-		__in_section(_static_thread_data, static, name) =        \
+	struct k_thread _k_thread_obj_##name;				 \
+	Z_STRUCT_SECTION_ITERABLE(_static_thread_data, _k_thread_data_##name) =\
 		_THREAD_INITIALIZER(&_k_thread_obj_##name,		 \
 				    _k_thread_stack_##name, stack_size,  \
 				entry, p1, p2, p3, prio, options, delay, \
@@ -1036,6 +1048,12 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * above this call, which is simply input to the priority selection
  * logic.
  *
+ * @note
+ *    @rst
+ *    You should enable :option:`CONFIG_SCHED_DEADLINE` in your project
+ *    configuration.
+ *    @endrst
+ *
  * @param thread A thread on which to set the deadline
  * @param deadline A time delta, in cycle units
  *
@@ -1051,6 +1069,12 @@ __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
  * After this returns, the thread will no longer be schedulable on any
  * CPUs.  The thread must not be currently runnable.
  *
+ * @note
+ *    @rst
+ *    You should enable :option:`CONFIG_SCHED_DEADLINE` in your project
+ *    configuration.
+ *    @endrst
+ *
  * @param thread Thread to operate upon
  * @return Zero on success, otherwise error code
  */
@@ -1062,6 +1086,12 @@ int k_thread_cpu_mask_clear(k_tid_t thread);
  * After this returns, the thread will be schedulable on any CPU.  The
  * thread must not be currently runnable.
  *
+ * @note
+ *    @rst
+ *    You should enable :option:`CONFIG_SCHED_DEADLINE` in your project
+ *    configuration.
+ *    @endrst
+ *
  * @param thread Thread to operate upon
  * @return Zero on success, otherwise error code
  */
@@ -1071,6 +1101,12 @@ int k_thread_cpu_mask_enable_all(k_tid_t thread);
  * @brief Enable thread to run on specified CPU
  *
  * The thread must not be currently runnable.
+ *
+ * @note
+ *    @rst
+ *    You should enable :option:`CONFIG_SCHED_DEADLINE` in your project
+ *    configuration.
+ *    @endrst
  *
  * @param thread Thread to operate upon
  * @param cpu CPU index
@@ -1082,6 +1118,12 @@ int k_thread_cpu_mask_enable(k_tid_t thread, int cpu);
  * @brief Prevent thread to run on specified CPU
  *
  * The thread must not be currently runnable.
+ *
+ * @note
+ *    @rst
+ *    You should enable :option:`CONFIG_SCHED_DEADLINE` in your project
+ *    configuration.
+ *    @endrst
  *
  * @param thread Thread to operate upon
  * @param cpu CPU index
@@ -1479,8 +1521,7 @@ typedef void (*k_timer_stop_t)(struct k_timer *timer);
  * @param stop_fn   Function to invoke if the timer is stopped while running.
  */
 #define K_TIMER_DEFINE(name, expiry_fn, stop_fn) \
-	struct k_timer name \
-		__in_section(_k_timer, static, name) = \
+	Z_STRUCT_SECTION_ITERABLE(k_timer, name) = \
 		Z_TIMER_INITIALIZER(name, expiry_fn, stop_fn)
 
 /**
@@ -1640,10 +1681,12 @@ static inline void *z_impl_k_timer_user_data_get(struct k_timer *timer)
  * This routine returns the elapsed time since the system booted,
  * in milliseconds.
  *
- * @note While this function returns time in milliseconds, it does not mean it
- * has millisecond resolution. The actual resolution depends on
- * :option:`CONFIG_SYS_CLOCK_TICKS_PER_SEC` config option, and with the default
- * setting of 100, system time is updated in increments of 10ms.
+ * @note
+ *    @rst
+ *    While this function returns time in milliseconds, it does
+ *    not mean it has millisecond resolution. The actual resolution depends on
+ *    :option:`CONFIG_SYS_CLOCK_TICKS_PER_SEC` config option.
+ *    @endrst
  *
  * @return Current uptime in milliseconds.
  */
@@ -1652,46 +1695,62 @@ __syscall s64_t k_uptime_get(void);
 /**
  * @brief Enable clock always on in tickless kernel
  *
- * This routine enables keeping the clock running (that is, it always
- * keeps an active timer interrupt scheduled) when there are no timer
- * events programmed in tickless kernel scheduling. This is necessary
- * if the clock is used to track passage of time (e.g. via
- * k_uptime_get_32()), otherwise the internal hardware counter may
- * roll over between interrupts.
+ * Deprecated.  This does nothing (it was always just a hint).  This
+ * functionality has been migrated to the SYSTEM_CLOCK_SLOPPY_IDLE
+ * kconfig.
  *
  * @retval prev_status Previous status of always on flag
  */
-int k_enable_sys_clock_always_on(void);
+/* LCOV_EXCL_START */
+__deprecated static inline int k_enable_sys_clock_always_on(void)
+{
+	__ASSERT(IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE),
+		 "Please use CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE instead");
+
+	return !IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE);
+}
+/* LCOV_EXCL_STOP */
 
 /**
  * @brief Disable clock always on in tickless kernel
  *
- * This routine disables keeping the clock running when
- * there are no timer events programmed in tickless kernel
- * scheduling. To save power, this routine should be called
- * immediately when clock is not used to track time.
+ * Deprecated.  This does nothing (it was always just a hint).  This
+ * functionality has been migrated to the SYS_CLOCK_SLOPPY_IDLE
+ * kconfig.
  */
-void k_disable_sys_clock_always_on(void);
+/* LCOV_EXCL_START */
+__deprecated static inline void k_disable_sys_clock_always_on(void)
+{
+	__ASSERT(!IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE),
+		 "Please use CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE instead");
+}
+/* LCOV_EXCL_STOP */
 
 /**
  * @brief Get system uptime (32-bit version).
  *
- * This routine returns the lower 32-bits of the elapsed time since the system
- * booted, in milliseconds.
+ * This routine returns the lower 32 bits of the system uptime in
+ * milliseconds.
  *
- * This routine can be more efficient than k_uptime_get(), as it reduces the
- * need for interrupt locking and 64-bit math. However, the 32-bit result
- * cannot hold a system uptime time larger than approximately 50 days, so the
- * caller must handle possible rollovers.
+ * Because correct conversion requires full precision of the system
+ * clock there is no benefit to using this over k_uptime_get() unless
+ * you know the application will never run long enough for the system
+ * clock to approach 2^32 ticks.  Calls to this function may involve
+ * interrupt blocking and 64-bit math.
  *
- * @note While this function returns time in milliseconds, it does not mean it
- * has millisecond resolution. The actual resolution depends on
- * :option:`CONFIG_SYS_CLOCK_TICKS_PER_SEC` config option, and with the default
- * setting of 100, system time is updated in increments of 10ms.
+ * @note
+ *    @rst
+ *    While this function returns time in milliseconds, it does
+ *    not mean it has millisecond resolution. The actual resolution depends on
+ *    :option:`CONFIG_SYS_CLOCK_TICKS_PER_SEC` config option
+ *    @endrst
  *
- * @return Current uptime in milliseconds.
+ * @return The low 32 bits of the current uptime, in milliseconds.
  */
-__syscall u32_t k_uptime_get_32(void);
+static inline u32_t k_uptime_get_32(void)
+{
+	return (u32_t)k_uptime_get();
+}
 
 /**
  * @brief Get elapsed time.
@@ -1820,8 +1879,8 @@ __syscall void k_queue_cancel_wait(struct k_queue *queue);
  * @brief Append an element to the end of a queue.
  *
  * This routine appends a data item to @a queue. A queue data item must be
- * aligned on a 4-byte boundary, and the first 32 bits of the item are
- * reserved for the kernel's use.
+ * aligned on a word boundary, and the first word of the item is reserved
+ * for the kernel's use.
  *
  * @note Can be called by ISRs.
  *
@@ -1854,8 +1913,8 @@ __syscall s32_t k_queue_alloc_append(struct k_queue *queue, void *data);
  * @brief Prepend an element to a queue.
  *
  * This routine prepends a data item to @a queue. A queue data item must be
- * aligned on a 4-byte boundary, and the first 32 bits of the item are
- * reserved for the kernel's use.
+ * aligned on a word boundary, and the first word of the item is reserved
+ * for the kernel's use.
  *
  * @note Can be called by ISRs.
  *
@@ -1888,8 +1947,8 @@ __syscall s32_t k_queue_alloc_prepend(struct k_queue *queue, void *data);
  * @brief Inserts an element to a queue.
  *
  * This routine inserts a data item to @a queue after previous item. A queue
- * data item must be aligned on a 4-byte boundary, and the first 32 bits of the
- * item are reserved for the kernel's use.
+ * data item must be aligned on a word boundary, and the first word of
+ * the item is reserved for the kernel's use.
  *
  * @note Can be called by ISRs.
  *
@@ -1905,7 +1964,7 @@ extern void k_queue_insert(struct k_queue *queue, void *prev, void *data);
  * @brief Atomically append a list of elements to a queue.
  *
  * This routine adds a list of data items to @a queue in one operation.
- * The data items must be in a singly-linked list, with the first 32 bits
+ * The data items must be in a singly-linked list, with the first word
  * in each data item pointing to the next data item; the list must be
  * NULL-terminated.
  *
@@ -1938,8 +1997,8 @@ extern void k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list);
 /**
  * @brief Get an element from a queue.
  *
- * This routine removes first data item from @a queue. The first 32 bits of the
- * data item are reserved for the kernel's use.
+ * This routine removes first data item from @a queue. The first word of the
+ * data item is reserved for the kernel's use.
  *
  * @note Can be called by ISRs, but @a timeout must be set to K_NO_WAIT.
  *
@@ -1955,8 +2014,8 @@ __syscall void *k_queue_get(struct k_queue *queue, s32_t timeout);
 /**
  * @brief Remove an element from a queue.
  *
- * This routine removes data item from @a queue. The first 32 bits of the
- * data item are reserved for the kernel's use. Removing elements from k_queue
+ * This routine removes data item from @a queue. The first word of the
+ * data item is reserved for the kernel's use. Removing elements from k_queue
  * rely on sys_slist_find_and_remove which is not a constant time operation.
  *
  * @note Can be called by ISRs
@@ -1974,8 +2033,8 @@ static inline bool k_queue_remove(struct k_queue *queue, void *data)
 /**
  * @brief Append an element to a queue only if it's not present already.
  *
- * This routine appends data item to @a queue. The first 32 bits of the
- * data item are reserved for the kernel's use. Appending elements to k_queue
+ * This routine appends data item to @a queue. The first word of the data
+ * item is reserved for the kernel's use. Appending elements to k_queue
  * relies on sys_slist_is_node_in_list which is not a constant time operation.
  *
  * @note Can be called by ISRs
@@ -2061,11 +2120,87 @@ static inline void *z_impl_k_queue_peek_tail(struct k_queue *queue)
  * @param name Name of the queue.
  */
 #define K_QUEUE_DEFINE(name) \
-	struct k_queue name \
-		__in_section(_k_queue, static, name) = \
+	Z_STRUCT_SECTION_ITERABLE(k_queue, name) = \
 		_K_QUEUE_INITIALIZER(name)
 
 /** @} */
+
+#ifdef CONFIG_USERSPACE
+/**
+ * @brief futex structure
+ *
+ * A k_futex is a lightweight mutual exclusion primitive designed
+ * to minimize kernel involvement. Uncontended operation relies
+ * only on atomic access to shared memory. k_futex are tracked as
+ * kernel objects and can live in user memory so any access bypass
+ * the kernel object permission management mechanism.
+ */
+struct k_futex {
+	atomic_t val;
+};
+
+/**
+ * @brief futex kernel data structure
+ *
+ * z_futex_data are the helper data structure for k_futex to complete
+ * futex contended operation on kernel side, structure z_futex_data
+ * of every futex object is invisible in user mode.
+ */
+struct z_futex_data {
+	_wait_q_t wait_q;
+	struct k_spinlock lock;
+};
+
+#define Z_FUTEX_DATA_INITIALIZER(obj) \
+	{ \
+	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q) \
+	}
+
+/**
+ * @defgroup futex_apis FUTEX APIs
+ * @ingroup kernel_apis
+ * @{
+ */
+
+/**
+ * @brief Pend the current thread on a futex
+ *
+ * Tests that the supplied futex contains the expected value, and if so,
+ * goes to sleep until some other thread calls k_futex_wake() on it.
+ *
+ * @param futex Address of the futex.
+ * @param expected Expected value of the futex, if it is different the caller
+ *		   will not wait on it.
+ * @param timeout Waiting period on the futex, in milliseconds, or one of the
+ *		  special values K_NO_WAIT or K_FOREVER.
+ * @retval -EACCES Caller does not have read access to futex address.
+ * @retval -EAGAIN If the futex value did not match the expected parameter.
+ * @retval -EINVAL Futex parameter address not recognized by the kernel.
+ * @retval -ETIMEDOUT Thread woke up due to timeout and not a futex wakeup.
+ * @retval 0 if the caller went to sleep and was woken up. The caller
+ *	     should check the futex's value on wakeup to determine if it needs
+ *	     to block again.
+ */
+__syscall int k_futex_wait(struct k_futex *futex, int expected, s32_t timeout);
+
+/**
+ * @brief Wake one/all threads pending on a futex
+ *
+ * Wake up the highest priority thread pending on the supplied futex, or
+ * wakeup all the threads pending on the supplied futex, and the behavior
+ * depends on wake_all.
+ *
+ * @param futex Futex to wake up pending threads.
+ * @param wake_all If true, wake up all pending threads; If false,
+ *                 wakeup the highest priority thread.
+ * @retval -EACCES Caller does not have access to the futex address.
+ * @retval -EINVAL Futex parameter address not recognized by the kernel.
+ * @retval Number of threads that were woken up.
+ */
+__syscall int k_futex_wake(struct k_futex *futex, bool wake_all);
+
+/** @} */
+#endif
 
 struct k_fifo {
 	struct k_queue _queue;
@@ -2102,7 +2237,7 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_init(fifo) \
-	k_queue_init((struct k_queue *) fifo)
+	k_queue_init(&(fifo)->_queue)
 
 /**
  * @brief Cancel waiting on a FIFO queue.
@@ -2119,14 +2254,14 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_cancel_wait(fifo) \
-	k_queue_cancel_wait((struct k_queue *) fifo)
+	k_queue_cancel_wait(&(fifo)->_queue)
 
 /**
  * @brief Add an element to a FIFO queue.
  *
  * This routine adds a data item to @a fifo. A FIFO data item must be
- * aligned on a 4-byte boundary, and the first 32 bits of the item are
- * reserved for the kernel's use.
+ * aligned on a word boundary, and the first word of the item is reserved
+ * for the kernel's use.
  *
  * @note Can be called by ISRs.
  *
@@ -2137,7 +2272,7 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_put(fifo, data) \
-	k_queue_append((struct k_queue *) fifo, data)
+	k_queue_append(&(fifo)->_queue, data)
 
 /**
  * @brief Add an element to a FIFO queue.
@@ -2157,13 +2292,13 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_alloc_put(fifo, data) \
-	k_queue_alloc_append((struct k_queue *) fifo, data)
+	k_queue_alloc_append(&(fifo)->_queue, data)
 
 /**
  * @brief Atomically add a list of elements to a FIFO.
  *
  * This routine adds a list of data items to @a fifo in one operation.
- * The data items must be in a singly-linked list, with the first 32 bits
+ * The data items must be in a singly-linked list, with the first word of
  * each data item pointing to the next data item; the list must be
  * NULL-terminated.
  *
@@ -2177,7 +2312,7 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_put_list(fifo, head, tail) \
-	k_queue_append_list((struct k_queue *) fifo, head, tail)
+	k_queue_append_list(&(fifo)->_queue, head, tail)
 
 /**
  * @brief Atomically add a list of elements to a FIFO queue.
@@ -2196,13 +2331,13 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_put_slist(fifo, list) \
-	k_queue_merge_slist((struct k_queue *) fifo, list)
+	k_queue_merge_slist(&(fifo)->_queue, list)
 
 /**
  * @brief Get an element from a FIFO queue.
  *
  * This routine removes a data item from @a fifo in a "first in, first out"
- * manner. The first 32 bits of the data item are reserved for the kernel's use.
+ * manner. The first word of the data item is reserved for the kernel's use.
  *
  * @note Can be called by ISRs, but @a timeout must be set to K_NO_WAIT.
  *
@@ -2215,7 +2350,7 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_get(fifo, timeout) \
-	k_queue_get((struct k_queue *) fifo, timeout)
+	k_queue_get(&(fifo)->_queue, timeout)
 
 /**
  * @brief Query a FIFO queue to see if it has data available.
@@ -2232,7 +2367,7 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_is_empty(fifo) \
-	k_queue_is_empty((struct k_queue *) fifo)
+	k_queue_is_empty(&(fifo)->_queue)
 
 /**
  * @brief Peek element at the head of a FIFO queue.
@@ -2249,7 +2384,7 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_peek_head(fifo) \
-	k_queue_peek_head((struct k_queue *) fifo)
+	k_queue_peek_head(&(fifo)->_queue)
 
 /**
  * @brief Peek element at the tail of FIFO queue.
@@ -2264,7 +2399,7 @@ struct k_fifo {
  * @req K-FIFO-001
  */
 #define k_fifo_peek_tail(fifo) \
-	k_queue_peek_tail((struct k_queue *) fifo)
+	k_queue_peek_tail(&(fifo)->_queue)
 
 /**
  * @brief Statically define and initialize a FIFO queue.
@@ -2277,8 +2412,7 @@ struct k_fifo {
  * @req K-FIFO-002
  */
 #define K_FIFO_DEFINE(name) \
-	struct k_fifo name \
-		__in_section(_k_queue, static, name) = \
+	Z_STRUCT_SECTION_ITERABLE(k_fifo, name) = \
 		Z_FIFO_INITIALIZER(name)
 
 /** @} */
@@ -2319,13 +2453,13 @@ struct k_lifo {
  * @req K-LIFO-001
  */
 #define k_lifo_init(lifo) \
-	k_queue_init((struct k_queue *) lifo)
+	k_queue_init(&(lifo)->_queue)
 
 /**
  * @brief Add an element to a LIFO queue.
  *
  * This routine adds a data item to @a lifo. A LIFO queue data item must be
- * aligned on a 4-byte boundary, and the first 32 bits of the item are
+ * aligned on a word boundary, and the first word of the item is
  * reserved for the kernel's use.
  *
  * @note Can be called by ISRs.
@@ -2337,7 +2471,7 @@ struct k_lifo {
  * @req K-LIFO-001
  */
 #define k_lifo_put(lifo, data) \
-	k_queue_prepend((struct k_queue *) lifo, data)
+	k_queue_prepend(&(lifo)->_queue, data)
 
 /**
  * @brief Add an element to a LIFO queue.
@@ -2357,13 +2491,13 @@ struct k_lifo {
  * @req K-LIFO-001
  */
 #define k_lifo_alloc_put(lifo, data) \
-	k_queue_alloc_prepend((struct k_queue *) lifo, data)
+	k_queue_alloc_prepend(&(lifo)->_queue, data)
 
 /**
  * @brief Get an element from a LIFO queue.
  *
  * This routine removes a data item from @a lifo in a "last in, first out"
- * manner. The first 32 bits of the data item are reserved for the kernel's use.
+ * manner. The first word of the data item is reserved for the kernel's use.
  *
  * @note Can be called by ISRs, but @a timeout must be set to K_NO_WAIT.
  *
@@ -2376,7 +2510,7 @@ struct k_lifo {
  * @req K-LIFO-001
  */
 #define k_lifo_get(lifo, timeout) \
-	k_queue_get((struct k_queue *) lifo, timeout)
+	k_queue_get(&(lifo)->_queue, timeout)
 
 /**
  * @brief Statically define and initialize a LIFO queue.
@@ -2389,8 +2523,7 @@ struct k_lifo {
  * @req K-LIFO-002
  */
 #define K_LIFO_DEFINE(name) \
-	struct k_lifo name \
-		__in_section(_k_queue, static, name) = \
+	Z_STRUCT_SECTION_ITERABLE(k_lifo, name) = \
 		_K_LIFO_INITIALIZER(name)
 
 /** @} */
@@ -2400,10 +2533,12 @@ struct k_lifo {
  */
 #define K_STACK_FLAG_ALLOC	((u8_t)1)	/* Buffer was allocated */
 
+typedef uintptr_t stack_data_t;
+
 struct k_stack {
 	_wait_q_t wait_q;
 	struct k_spinlock lock;
-	u32_t *base, *next, *top;
+	stack_data_t *base, *next, *top;
 
 	_OBJECT_TRACING_NEXT_PTR(k_stack)
 	u8_t flags;
@@ -2443,7 +2578,7 @@ struct k_stack {
  * @req K-STACK-001
  */
 void k_stack_init(struct k_stack *stack,
-		  u32_t *buffer, u32_t num_entries);
+		  stack_data_t *buffer, u32_t num_entries);
 
 
 /**
@@ -2479,7 +2614,7 @@ void k_stack_cleanup(struct k_stack *stack);
 /**
  * @brief Push an element onto a stack.
  *
- * This routine adds a 32-bit value @a data to @a stack.
+ * This routine adds a stack_data_t value @a data to @a stack.
  *
  * @note Can be called by ISRs.
  *
@@ -2489,13 +2624,13 @@ void k_stack_cleanup(struct k_stack *stack);
  * @return N/A
  * @req K-STACK-001
  */
-__syscall void k_stack_push(struct k_stack *stack, u32_t data);
+__syscall void k_stack_push(struct k_stack *stack, stack_data_t data);
 
 /**
  * @brief Pop an element from a stack.
  *
- * This routine removes a 32-bit value from @a stack in a "last in, first out"
- * manner and stores the value in @a data.
+ * This routine removes a stack_data_t value from @a stack in a "last in,
+ * first out" manner and stores the value in @a data.
  *
  * @note Can be called by ISRs, but @a timeout must be set to K_NO_WAIT.
  *
@@ -2509,7 +2644,7 @@ __syscall void k_stack_push(struct k_stack *stack, u32_t data);
  * @retval -EAGAIN Waiting period timed out.
  * @req K-STACK-001
  */
-__syscall int k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout);
+__syscall int k_stack_pop(struct k_stack *stack, stack_data_t *data, s32_t timeout);
 
 /**
  * @brief Statically define and initialize a stack
@@ -2523,10 +2658,9 @@ __syscall int k_stack_pop(struct k_stack *stack, u32_t *data, s32_t timeout);
  * @req K-STACK-002
  */
 #define K_STACK_DEFINE(name, stack_num_entries)                \
-	u32_t __noinit                                      \
+	stack_data_t __noinit                                  \
 		_k_stack_buf_##name[stack_num_entries];        \
-	struct k_stack name                                    \
-		__in_section(_k_stack, static, name) =    \
+	Z_STRUCT_SECTION_ITERABLE(k_stack, name) = \
 		_K_STACK_INITIALIZER(name, _k_stack_buf_##name, \
 				    stack_num_entries)
 
@@ -2960,8 +3094,7 @@ struct k_mutex {
  * @req K-MUTEX-001
  */
 #define K_MUTEX_DEFINE(name) \
-	struct k_mutex name \
-		__in_section(_k_mutex, static, name) = \
+	Z_STRUCT_SECTION_ITERABLE(k_mutex, name) = \
 		_K_MUTEX_INITIALIZER(name)
 
 /**
@@ -3161,8 +3294,7 @@ static inline unsigned int z_impl_k_sem_count_get(struct k_sem *sem)
  * @req K-SEM-002
  */
 #define K_SEM_DEFINE(name, initial_count, count_limit) \
-	struct k_sem name \
-		__in_section(_k_sem, static, name) = \
+	Z_STRUCT_SECTION_ITERABLE(k_sem, name) = \
 		Z_SEM_INITIALIZER(name, initial_count, count_limit); \
 	BUILD_ASSERT(((count_limit) != 0) && \
 		     ((initial_count) <= (count_limit)));
@@ -3248,12 +3380,11 @@ struct k_msgq_attrs {
  *
  * @req K-MSGQ-001
  */
-#define K_MSGQ_DEFINE(q_name, q_msg_size, q_max_msgs, q_align)      \
-	static char __noinit __aligned(q_align)              \
-		_k_fifo_buf_##q_name[(q_max_msgs) * (q_msg_size)];  \
-	struct k_msgq q_name                                        \
-		__in_section(_k_msgq, static, q_name) =        \
-	       _K_MSGQ_INITIALIZER(q_name, _k_fifo_buf_##q_name,     \
+#define K_MSGQ_DEFINE(q_name, q_msg_size, q_max_msgs, q_align)		\
+	static char __noinit __aligned(q_align)				\
+		_k_fifo_buf_##q_name[(q_max_msgs) * (q_msg_size)];	\
+	Z_STRUCT_SECTION_ITERABLE(k_msgq, q_name) =			\
+	       _K_MSGQ_INITIALIZER(q_name, _k_fifo_buf_##q_name,	\
 				  q_msg_size, q_max_msgs)
 
 /**
@@ -3515,8 +3646,7 @@ struct k_mbox {
  * @req K-MBOX-001
  */
 #define K_MBOX_DEFINE(name) \
-	struct k_mbox name \
-		__in_section(_k_mbox, static, name) = \
+	Z_STRUCT_SECTION_ITERABLE(k_mbox, name) = \
 		_K_MBOX_INITIALIZER(name) \
 
 /**
@@ -3718,8 +3848,7 @@ struct k_pipe {
 #define K_PIPE_DEFINE(name, pipe_buffer_size, pipe_align)		\
 	static unsigned char __noinit __aligned(pipe_align)	\
 		_k_pipe_buf_##name[pipe_buffer_size];			\
-	struct k_pipe name						\
-		__in_section(_k_pipe, static, name) =			\
+	Z_STRUCT_SECTION_ITERABLE(k_pipe, name) = \
 		_K_PIPE_INITIALIZER(name, _k_pipe_buf_##name, pipe_buffer_size)
 
 /**
@@ -3897,12 +4026,11 @@ struct k_mem_slab {
  * @req K-MSLAB-001
  */
 #define K_MEM_SLAB_DEFINE(name, slab_block_size, slab_num_blocks, slab_align) \
-	char __noinit __aligned(slab_align) \
-		_k_mem_slab_buf_##name[(slab_num_blocks) * (slab_block_size)]; \
-	struct k_mem_slab name \
-		__in_section(_k_mem_slab, static, name) = \
+	char __noinit __aligned(WB_UP(slab_align)) \
+	   _k_mem_slab_buf_##name[(slab_num_blocks) * WB_UP(slab_block_size)]; \
+	Z_STRUCT_SECTION_ITERABLE(k_mem_slab, name) = \
 		_K_MEM_SLAB_INITIALIZER(name, _k_mem_slab_buf_##name, \
-				      slab_block_size, slab_num_blocks)
+					WB_UP(slab_block_size), slab_num_blocks)
 
 /**
  * @brief Initialize a memory slab.
@@ -3911,7 +4039,8 @@ struct k_mem_slab {
  *
  * The memory slab's buffer contains @a slab_num_blocks memory blocks
  * that are @a slab_block_size bytes long. The buffer must be aligned to an
- * N-byte boundary, where N is a power of 2 larger than 2 (i.e. 4, 8, 16, ...).
+ * N-byte boundary matching a word boundary, where N is a power of 2
+ * (i.e. 4 on 32-bit systems, 8, 16, ...).
  * To ensure that each memory block is similarly aligned to this boundary,
  * @a slab_block_size must also be a multiple of N.
  *
@@ -4033,19 +4162,20 @@ struct k_mem_pool {
  * @req K-MPOOL-001
  */
 #define K_MEM_POOL_DEFINE(name, minsz, maxsz, nmax, align)		\
-	char __aligned(align) _mpool_buf_##name[_ALIGN4(maxsz) * nmax	\
+	char __aligned(WB_UP(align)) _mpool_buf_##name[WB_UP(maxsz) * nmax \
 				  + _MPOOL_BITS_SIZE(maxsz, minsz, nmax)]; \
 	struct sys_mem_pool_lvl _mpool_lvls_##name[Z_MPOOL_LVLS(maxsz, minsz)]; \
-	struct k_mem_pool name __in_section(_k_mem_pool, static, name) = { \
+	Z_STRUCT_SECTION_ITERABLE(k_mem_pool, name) = { \
 		.base = {						\
 			.buf = _mpool_buf_##name,			\
-			.max_sz = _ALIGN4(maxsz),			\
+			.max_sz = WB_UP(maxsz),				\
 			.n_max = nmax,					\
 			.n_levels = Z_MPOOL_LVLS(maxsz, minsz),		\
 			.levels = _mpool_lvls_##name,			\
 			.flags = SYS_MEM_POOL_KERNEL			\
 		} \
-	}
+	}; \
+	BUILD_ASSERT(WB_UP(maxsz) >= _MPOOL_MINBLK);
 
 /**
  * @brief Allocate memory from a memory pool.
@@ -4454,6 +4584,10 @@ __syscall void k_poll_signal_check(struct k_poll_signal *signal,
  * passed again to k_poll() or k_poll() will consider it being signaled, and
  * will return immediately.
  *
+ * @note The result is stored and the 'signaled' field is set even if
+ * this function returns an error indicating that an expiring poll was
+ * not notified.  The next k_poll() will detect the missed raise.
+ *
  * @param signal A poll signal.
  * @param result The value to store in the result field of the signal.
  *
@@ -4528,8 +4662,7 @@ extern void z_sys_power_save_idle_exit(s32_t ticks);
  */
 #define z_except_reason(reason) do { \
 		printk("@ %s:%d:\n", __FILE__,  __LINE__); \
-		z_NanoFatalErrorHandler(reason, &_default_esf); \
-		CODE_UNREACHABLE; \
+		z_fatal_error(reason, NULL); \
 	} while (false)
 
 #endif /* _ARCH__EXCEPT */
@@ -4540,13 +4673,13 @@ extern void z_sys_power_save_idle_exit(s32_t ticks);
  * This should be called when a thread has encountered an unrecoverable
  * runtime condition and needs to terminate. What this ultimately
  * means is determined by the _fatal_error_handler() implementation, which
- * will be called will reason code _NANO_ERR_KERNEL_OOPS.
+ * will be called will reason code K_ERR_KERNEL_OOPS.
  *
  * If this is called from ISR context, the default system fatal error handler
  * will treat it as an unrecoverable system error, just like k_panic().
  * @req K-MISC-003
  */
-#define k_oops()	z_except_reason(_NANO_ERR_KERNEL_OOPS)
+#define k_oops()	z_except_reason(K_ERR_KERNEL_OOPS)
 
 /**
  * @brief Fatally terminate the system
@@ -4554,10 +4687,10 @@ extern void z_sys_power_save_idle_exit(s32_t ticks);
  * This should be called when the Zephyr kernel has encountered an
  * unrecoverable runtime condition and needs to terminate. What this ultimately
  * means is determined by the _fatal_error_handler() implementation, which
- * will be called will reason code _NANO_ERR_KERNEL_PANIC.
+ * will be called will reason code K_ERR_KERNEL_PANIC.
  * @req K-MISC-004
  */
-#define k_panic()	z_except_reason(_NANO_ERR_KERNEL_PANIC)
+#define k_panic()	z_except_reason(K_ERR_KERNEL_PANIC)
 
 /*
  * private APIs that are utilized by one or more public APIs
@@ -4750,17 +4883,17 @@ static inline char *Z_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
 #define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
 	_ARCH_MEM_PARTITION_ALIGN_CHECK(start, size); \
 	struct k_mem_partition name =\
-		{ (u32_t)start, size, attr}
+		{ (uintptr_t)start, size, attr}
 #else
 #define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
 	struct k_mem_partition name =\
-		{ (u32_t)start, size, attr}
+		{ (uintptr_t)start, size, attr}
 #endif /* _ARCH_MEM_PARTITION_ALIGN_CHECK */
 
 /* memory partition */
 struct k_mem_partition {
 	/* start address of memory partition */
-	u32_t start;
+	uintptr_t start;
 	/* size of memory partition */
 	u32_t size;
 #if defined(CONFIG_MEMORY_PROTECTION)
@@ -4788,6 +4921,9 @@ struct k_mem_domain {
  *
  * Initialize a memory domain with given name and memory partitions.
  *
+ * See documentation for k_mem_domain_add_partition() for details about
+ * partition constraints.
+ *
  * @param domain The memory domain to be initialized.
  * @param num_parts The number of array items of "parts" parameter.
  * @param parts An array of pointers to the memory partitions. Can be NULL
@@ -4809,7 +4945,22 @@ extern void k_mem_domain_destroy(struct k_mem_domain *domain);
 /**
  * @brief Add a memory partition into a memory domain.
  *
- * Add a memory partition into a memory domain.
+ * Add a memory partition into a memory domain. Partitions must conform to
+ * the following constraints:
+ *
+ * - Partition bounds must be within system RAM boundaries on MMU-based
+ *   systems.
+ * - Partitions in the same memory domain may not overlap each other.
+ * - Partitions must not be defined which expose private kernel
+ *   data structures or kernel objects.
+ * - The starting address alignment, and the partition size must conform to
+ *   the constraints of the underlying memory management hardware, which
+ *   varies per architecture.
+ * - Memory domain partitions are only intended to control access to memory
+ *   from user mode threads.
+ *
+ * Violating these constraints may lead to CPU exceptions or undefined
+ * behavior.
  *
  * @param domain The memory domain to be added a memory partition.
  * @param part The memory partition to be added
@@ -4890,11 +5041,34 @@ __syscall void k_str_out(char *c, size_t n);
 extern void z_arch_start_cpu(int cpu_num, k_thread_stack_t *stack, int sz,
 			    void (*fn)(int key, void *data), void *arg);
 
+
+/**
+ * @brief Disable preservation of floating point context information.
+ *
+ * This routine informs the kernel that the specified thread
+ * will no longer be using the floating point registers.
+ *
+ * @warning
+ * Some architectures apply restrictions on how the disabling of floating
+ * point preservation may be requested, see z_arch_float_disable.
+ *
+ * @warning
+ * This routine should only be used to disable floating point support for
+ * a thread that currently has such support enabled.
+ *
+ * @param thread ID of thread.
+ *
+ * @retval 0       On success.
+ * @retval -ENOSYS If the floating point disabling is not implemented.
+ *         -EINVAL If the floating point disabling could not be performed.
+ */
+__syscall int k_float_disable(struct k_thread *thread);
+
 #ifdef __cplusplus
 }
 #endif
 
-#include <tracing.h>
+#include <debug/tracing.h>
 #include <syscalls/kernel.h>
 
 #endif /* !_ASMLANGUAGE */

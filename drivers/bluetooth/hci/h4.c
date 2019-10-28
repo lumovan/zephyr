@@ -13,9 +13,9 @@
 #include <arch/cpu.h>
 
 #include <init.h>
-#include <uart.h>
-#include <misc/util.h>
-#include <misc/byteorder.h>
+#include <drivers/uart.h>
+#include <sys/util.h>
+#include <sys/byteorder.h>
 #include <string.h>
 
 #include <bluetooth/bluetooth.h>
@@ -27,10 +27,6 @@
 #include "common/log.h"
 
 #include "../util.h"
-
-#if defined(CONFIG_BT_NRF51_PM)
-#include "../nrf51_pm.h"
-#endif
 
 #define H4_NONE 0x00
 #define H4_CMD  0x01
@@ -418,20 +414,31 @@ static int h4_send(struct net_buf *buf)
 	return 0;
 }
 
+/** Setup the HCI transport, which usually means to reset the Bluetooth IC
+  *
+  * @param dev The device structure for the bus connecting to the IC
+  *
+  * @return 0 on success, negative error value on failure
+  */
+int __weak bt_hci_transport_setup(struct device *dev)
+{
+	h4_discard(h4_dev, 32);
+	return 0;
+}
+
 static int h4_open(void)
 {
+	int ret;
+
 	BT_DBG("");
 
 	uart_irq_rx_disable(h4_dev);
 	uart_irq_tx_disable(h4_dev);
 
-#if defined(CONFIG_BT_NRF51_PM)
-	if (nrf51_init(h4_dev) < 0) {
+	ret = bt_hci_transport_setup(h4_dev);
+	if (ret < 0) {
 		return -EIO;
 	}
-#else
-	h4_discard(h4_dev, 32);
-#endif
 
 	uart_irq_callback_set(h4_dev, bt_uart_isr);
 

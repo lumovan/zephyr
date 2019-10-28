@@ -11,14 +11,14 @@
 LOG_MODULE_REGISTER(net_sock_packet, CONFIG_NET_SOCKETS_LOG_LEVEL);
 
 #include <kernel.h>
-#include <entropy.h>
-#include <misc/util.h>
+#include <drivers/entropy.h>
+#include <sys/util.h>
 #include <net/net_context.h>
 #include <net/net_pkt.h>
 #include <net/socket.h>
 #include <net/ethernet.h>
 #include <syscall_handler.h>
-#include <misc/fdtable.h>
+#include <sys/fdtable.h>
 
 #include "sockets_internal.h"
 
@@ -36,16 +36,11 @@ static inline int k_fifo_wait_non_empty(struct k_fifo *fifo, int32_t timeout)
 	return k_poll(events, ARRAY_SIZE(events), timeout);
 }
 
-int zpacket_socket(int family, int type, int proto)
+static int zpacket_socket(int family, int type, int proto)
 {
 	struct net_context *ctx;
 	int fd;
 	int ret;
-
-	if (type != SOCK_RAW || proto != ETH_P_ALL) {
-		errno = -EOPNOTSUPP;
-		return -1;
-	}
 
 	fd = z_reserve_fd();
 	if (fd < 0) {
@@ -341,3 +336,14 @@ static const struct socket_op_vtable packet_sock_fd_op_vtable = {
 	.getsockopt = packet_sock_getsockopt_vmeth,
 	.setsockopt = packet_sock_setsockopt_vmeth,
 };
+
+static bool packet_is_supported(int family, int type, int proto)
+{
+	if (type != SOCK_RAW || proto != ETH_P_ALL) {
+		return false;
+	}
+
+	return true;
+}
+
+NET_SOCKET_REGISTER(af_packet, AF_PACKET, packet_is_supported, zpacket_socket);

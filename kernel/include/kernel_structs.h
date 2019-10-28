@@ -10,10 +10,10 @@
 #include <kernel.h>
 
 #if !defined(_ASMLANGUAGE)
-#include <atomic.h>
-#include <misc/dlist.h>
-#include <misc/rb.h>
-#include <misc/util.h>
+#include <sys/atomic.h>
+#include <sys/dlist.h>
+#include <sys/rb.h>
+#include <sys/util.h>
 #include <string.h>
 #endif
 
@@ -167,9 +167,6 @@ struct z_kernel {
 #if defined(CONFIG_THREAD_MONITOR)
 	struct k_thread *threads; /* singly linked list of ALL threads */
 #endif
-
-	/* arch-specific part of _kernel */
-	struct _kernel_arch arch;
 };
 
 typedef struct z_kernel _kernel_t;
@@ -188,7 +185,7 @@ extern struct z_kernel _kernel;
 
 #include <kernel_arch_func.h>
 
-#if CONFIG_USE_SWITCH
+#ifdef CONFIG_USE_SWITCH
 /* This is a arch function traditionally, but when the switch-based
  * z_swap() is in use it's a simple inline provided by the kernel.
  */
@@ -252,7 +249,7 @@ static ALWAYS_INLINE void z_new_thread_init(struct k_thread *thread,
 #endif /* CONFIG_USERSPACE */
 
 #if defined(CONFIG_THREAD_STACK_INFO)
-	thread->stack_info.start = (u32_t)pStack;
+	thread->stack_info.start = (uintptr_t)pStack;
 	thread->stack_info.size = (u32_t)stackSize;
 #endif /* CONFIG_THREAD_STACK_INFO */
 }

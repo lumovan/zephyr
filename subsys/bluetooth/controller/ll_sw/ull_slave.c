@@ -4,32 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <stddef.h>
-#include <stdbool.h>
-#include <toolchain.h>
-#include <zephyr/types.h>
-#include <misc/byteorder.h>
-#include <misc/util.h>
+#include <zephyr.h>
+#include <bluetooth/hci.h>
+#include <sys/byteorder.h>
+
+#include "util/util.h"
+#include "util/memq.h"
+#include "util/mayfly.h"
 
 #include "hal/ticker.h"
 #include "hal/ccm.h"
-#include "util/memq.h"
-#include "util/mayfly.h"
+
 #include "ticker/ticker.h"
 
-#include "util/util.h"
-
 #include "pdu.h"
+#include "ll.h"
 
 #include "lll.h"
 #include "lll_vendor.h"
 #include "lll_adv.h"
 #include "lll_conn.h"
 #include "lll_slave.h"
+#include "lll_filter.h"
 #include "lll_tim_internal.h"
 
 #include "ull_adv_types.h"
 #include "ull_conn_types.h"
+#include "ull_filter.h"
 
 #include "ull_internal.h"
 #include "ull_adv_internal.h"
@@ -91,7 +92,8 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 		(((lll_conn_ppm_local_get() +
 		   lll_conn_ppm_get(lll->slave.sca)) *
 		  conn_interval_us) + (1000000 - 1)) / 1000000U;
-	lll->slave.window_widening_max_us = (conn_interval_us >> 1) - TIFS_US;
+	lll->slave.window_widening_max_us = (conn_interval_us >> 1) -
+					    EVENT_IFS_US;
 	lll->slave.window_size_event_us = pdu_adv->connect_ind.win_size * 1250U;
 
 	/* procedure timeouts */
@@ -114,21 +116,49 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 			     conn->apto_reload;
 #endif /* CONFIG_BT_CTLR_LE_PING */
 
-	/* FIXME: */
-	#if 0
-	memcpy((void *)&lll->slave.force, &lll->access_addr[0],
-	       sizeof(lll->slave.force));
-	#endif
+	memcpy((void *)&conn->slave.force, &lll->access_addr[0],
+	       sizeof(conn->slave.force));
 
-	chan_sel = pdu_adv->chan_sel;
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	u8_t own_addr_type = pdu_adv->rx_addr;
+	u8_t own_addr[BDADDR_SIZE];
+	u8_t rl_idx = ftr->rl_idx;
+
+	memcpy(own_addr, &pdu_adv->connect_ind.adv_addr[0], BDADDR_SIZE);
+#endif
+
 	peer_addr_type = pdu_adv->tx_addr;
 	memcpy(peer_addr, pdu_adv->connect_ind.init_addr, BDADDR_SIZE);
+
+	chan_sel = pdu_adv->chan_sel;
 
 	cc = (void *)pdu_adv;
 	cc->status = 0U;
 	cc->role = 1U;
-	cc->peer_addr_type = peer_addr_type;
-	memcpy(cc->peer_addr, peer_addr, BDADDR_SIZE);
+
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	cc->own_addr_type = own_addr_type;
+	memcpy(&cc->own_addr[0], &own_addr[0], BDADDR_SIZE);
+
+	if (rl_idx != FILTER_IDX_NONE) {
+		/* TODO: store rl_idx instead if safe */
+		/* Store identity address */
+		ll_rl_id_addr_get(rl_idx, &cc->peer_addr_type,
+				  &cc->peer_addr[0]);
+		/* Mark it as identity address from RPA (0x02, 0x03) */
+		cc->peer_addr_type += 2;
+
+		/* Store peer RPA */
+		memcpy(&cc->peer_rpa[0], &peer_addr[0], BDADDR_SIZE);
+	} else {
+		memset(&cc->peer_rpa[0], 0x0, BDADDR_SIZE);
+#else
+	if (1) {
+#endif /* CONFIG_BT_CTLR_PRIVACY */
+		cc->peer_addr_type = peer_addr_type;
+		memcpy(cc->peer_addr, peer_addr, BDADDR_SIZE);
+	}
+
 	cc->interval = lll->interval;
 	cc->latency = lll->latency;
 	cc->timeout = timeout;
@@ -176,91 +206,6 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 
 	ll_rx_put(link, rx);
 	ll_rx_sched();
-#if 0
-		/* Prepare the rx packet structure */
-		node_rx->hdr.handle = conn->handle;
-		node_rx->hdr.type = NODE_RX_TYPE_CONNECTION;
-
-		/* prepare connection complete structure */
-		pdu_data = (void *)node_rx->pdu_data;
-		radio_le_conn_cmplt = (void *)pdu_data->lldata;
-		radio_le_conn_cmplt->status = 0x00;
-		radio_le_conn_cmplt->role = 0x01;
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-		radio_le_conn_cmplt->own_addr_type = pdu_adv->rx_addr;
-		memcpy(&radio_le_conn_cmplt->own_addr[0],
-		       &pdu_adv->connect_ind.adv_addr[0], BDADDR_SIZE);
-		if (rl_idx != FILTER_IDX_NONE) {
-			/* TODO: store rl_idx instead if safe */
-			/* Store identity address */
-			ll_rl_id_addr_get(rl_idx,
-					  &radio_le_conn_cmplt->peer_addr_type,
-					  &radio_le_conn_cmplt->peer_addr[0]);
-			/* Mark it as identity address from RPA (0x02, 0x03) */
-			radio_le_conn_cmplt->peer_addr_type += 2;
-
-			/* Store peer RPA */
-			memcpy(&radio_le_conn_cmplt->peer_rpa[0],
-			       &pdu_adv->connect_ind.init_addr[0],
-			       BDADDR_SIZE);
-		} else {
-			memset(&radio_le_conn_cmplt->peer_rpa[0], 0x0,
-			       BDADDR_SIZE);
-#else
-		if (1) {
-#endif /* CONFIG_BT_CTLR_PRIVACY */
-			radio_le_conn_cmplt->peer_addr_type = pdu_adv->tx_addr;
-			memcpy(&radio_le_conn_cmplt->peer_addr[0],
-			       &pdu_adv->connect_ind.init_addr[0],
-			       BDADDR_SIZE);
-		}
-
-		radio_le_conn_cmplt->interval =
-			pdu_adv->connect_ind.interval;
-		radio_le_conn_cmplt->latency =
-			pdu_adv->connect_ind.latency;
-		radio_le_conn_cmplt->timeout =
-			pdu_adv->connect_ind.timeout;
-		radio_le_conn_cmplt->mca =
-			pdu_adv->connect_ind.sca;
-
-		/* enqueue connection complete structure into queue */
-		rx_fc_lock(conn->handle);
-		packet_rx_enqueue();
-
-		/* Use Channel Selection Algorithm #2 if peer too supports it */
-		if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
-			struct radio_le_chan_sel_algo *le_chan_sel_algo;
-
-			/* Generate LE Channel Selection Algorithm event */
-			node_rx = packet_rx_reserve_get(3);
-			LL_ASSERT(node_rx);
-
-			node_rx->hdr.handle = conn->handle;
-			node_rx->hdr.type = NODE_RX_TYPE_CHAN_SEL_ALGO;
-
-			pdu_data = (void *)node_rx->pdu_data;
-			le_chan_sel_algo = (void *)pdu_data->lldata;
-
-			if (pdu_adv->chan_sel) {
-				u16_t aa_ls =
-					((u16_t)conn->access_addr[1] << 8) |
-					conn->access_addr[0];
-				u16_t aa_ms =
-					((u16_t)conn->access_addr[3] << 8) |
-					 conn->access_addr[2];
-
-				conn->data_chan_sel = 1;
-				conn->data_chan_id = aa_ms ^ aa_ls;
-
-				le_chan_sel_algo->chan_sel_algo = 0x01;
-			} else {
-				le_chan_sel_algo->chan_sel_algo = 0x00;
-			}
-
-			packet_rx_enqueue();
-		}
-#endif
 
 	/* TODO: active_to_start feature port */
 	conn->evt.ticks_active_to_start = 0U;
@@ -270,7 +215,7 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	conn->evt.ticks_slot =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US +
-				       ftr->us_radio_rdy + 328 + TIFS_US +
+				       ftr->us_radio_rdy + 328 + EVENT_IFS_US +
 				       328);
 
 	ticks_slot_offset = MAX(conn->evt.ticks_active_to_start,
@@ -345,6 +290,13 @@ void ull_slave_setup(memq_link_t *link, struct node_rx_hdr *rx,
 #endif
 }
 
+/**
+ * @brief Extract timing from completed event
+ *
+ * @param node_rx_event_done[in] Done event containing fresh timing information
+ * @param ticks_drift_plus[out]  Positive part of drift uncertainty window
+ * @param ticks_drift_minus[out] Negative part of drift uncertainty window
+ */
 void ull_slave_done(struct node_rx_event_done *done, u32_t *ticks_drift_plus,
 		    u32_t *ticks_drift_minus)
 {
@@ -438,8 +390,8 @@ u8_t ll_start_enc_req_send(u16_t handle, u8_t error_code,
 	}
 
 	if (error_code) {
-		if (conn->refresh == 0U) {
-			ret = ull_conn_allowed_check(conn);
+		if (conn->llcp_enc.refresh == 0U) {
+			ret = ull_conn_llcp_req(conn);
 			if (ret) {
 				return ret;
 			}
@@ -460,13 +412,12 @@ u8_t ll_start_enc_req_send(u16_t handle, u8_t error_code,
 			conn->llcp_terminate.req++;
 		}
 	} else {
-		memcpy(&conn->llcp.encryption.ltk[0], ltk,
-		       sizeof(conn->llcp.encryption.ltk));
-
-		ret = ull_conn_allowed_check(conn);
+		ret = ull_conn_llcp_req(conn);
 		if (ret) {
 			return ret;
 		}
+
+		memcpy(&conn->llcp_enc.ltk[0], ltk, sizeof(conn->llcp_enc.ltk));
 
 		conn->llcp.encryption.error_code = 0U;
 		conn->llcp.encryption.initiate = 0U;

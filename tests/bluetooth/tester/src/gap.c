@@ -6,7 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <atomic.h>
+#include <sys/atomic.h>
 #include <zephyr/types.h>
 #include <string.h>
 
@@ -14,7 +14,7 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
 
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <net/buf.h>
 
 #include <logging/log.h>
@@ -596,7 +596,7 @@ static void pair(const u8_t *data, u16_t len)
 		goto rsp;
 	}
 
-	if (bt_conn_security(conn, BT_SECURITY_MEDIUM)) {
+	if (bt_conn_set_security(conn, BT_SECURITY_L2)) {
 		status = BTP_STATUS_FAILED;
 		bt_conn_unref(conn);
 		goto rsp;

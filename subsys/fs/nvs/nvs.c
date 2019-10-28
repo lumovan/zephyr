@@ -5,12 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <flash.h>
+#include <drivers/flash.h>
 #include <string.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <nvs/nvs.h>
-#include <crc.h>
+#include <fs/nvs.h>
+#include <sys/crc.h>
 #include "nvs_priv.h"
 
 #include <logging/log.h>
@@ -235,8 +235,8 @@ static int nvs_flash_erase_sector(struct nvs_fs *fs, u32_t addr)
 		/* flash protection set error */
 		return rc;
 	}
-	LOG_DBG("Erasing flash at %" PRIx32 ", len %d",
-		offset, fs->sector_size);
+	LOG_DBG("Erasing flash at %lx, len %d", (long int) offset,
+		fs->sector_size);
 	rc = flash_erase(fs->flash_device, offset, fs->sector_size);
 	if (rc) {
 		/* flash erase error */
@@ -716,7 +716,7 @@ int nvs_init(struct nvs_fs *fs, const char *dev_name)
 		LOG_ERR("Unable to get page info");
 		return -EINVAL;
 	}
-	if (fs->sector_size % info.size) {
+	if (!fs->sector_size || fs->sector_size % info.size) {
 		LOG_ERR("Invalid sector size");
 		return -EINVAL;
 	}
@@ -753,6 +753,7 @@ ssize_t nvs_write(struct nvs_fs *fs, u16_t id, const void *data, size_t len)
 	struct nvs_ate wlk_ate;
 	u32_t wlk_addr, rd_addr;
 	u16_t required_space = 0U; /* no space, appropriate for delete ate */
+	bool prev_found = false;
 
 	if (!fs->ready) {
 		LOG_ERR("NVS not initialized");
@@ -782,6 +783,7 @@ ssize_t nvs_write(struct nvs_fs *fs, u16_t id, const void *data, size_t len)
 			return rc;
 		}
 		if ((wlk_ate.id == id) && (!nvs_ate_crc8_check(&wlk_ate))) {
+			prev_found = true;
 			break;
 		}
 		if (wlk_addr == fs->ate_wra) {
@@ -789,7 +791,7 @@ ssize_t nvs_write(struct nvs_fs *fs, u16_t id, const void *data, size_t len)
 		}
 	}
 
-	if (wlk_addr != fs->ate_wra) {
+	if (prev_found) {
 		/* previous entry found */
 		rd_addr &= ADDR_SECT_MASK;
 		rd_addr += wlk_ate.offset;

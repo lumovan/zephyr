@@ -6,14 +6,14 @@
 
 #include <zephyr.h>
 #include <bluetooth/hci.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 
 #include "util/util.h"
 #include "util/memq.h"
+#include "util/mayfly.h"
 
 #include "hal/ticker.h"
 #include "hal/ccm.h"
-#include "util/mayfly.h"
 #include "ticker/ticker.h"
 
 #include "pdu.h"
@@ -23,13 +23,17 @@
 #include "lll.h"
 #include "lll_vendor.h"
 #include "lll_clock.h"
+#include "lll_adv.h"
 #include "lll_scan.h"
 #include "lll_conn.h"
 #include "lll_master.h"
+#include "lll_filter.h"
 #include "lll_tim_internal.h"
 
+#include "ull_adv_types.h"
 #include "ull_scan_types.h"
 #include "ull_conn_types.h"
+#include "ull_filter.h"
 
 #include "ull_internal.h"
 #include "ull_scan_internal.h"
@@ -47,7 +51,7 @@ static void access_addr_get(u8_t access_addr[]);
 
 u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 			  u8_t filter_policy, u8_t peer_addr_type,
-			  u8_t *p_peer_addr, u8_t own_addr_type,
+			  u8_t *peer_addr, u8_t own_addr_type,
 			  u16_t interval, u16_t latency, u16_t timeout)
 {
 	struct lll_conn *conn_lll;
@@ -57,7 +61,6 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 	struct ll_conn *conn;
 	memq_link_t *link;
 	u8_t access_addr[4];
-	u32_t err;
 	u8_t hop;
 
 	scan = ull_scan_is_disabled_get(0);
@@ -82,16 +85,10 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 		return BT_HCI_ERR_MEM_CAPACITY_EXCEEDED;
 	}
 
-	err = ull_scan_params_set(scan, 0, scan_interval, scan_window,
-				  own_addr_type, filter_policy);
-	if (err) {
-		ll_conn_release(conn);
-		ll_rx_link_release(link);
-		return err;
-	}
+	ull_scan_params_set(lll, 0, scan_interval, scan_window, filter_policy);
 
 	lll->adv_addr_type = peer_addr_type;
-	memcpy(lll->adv_addr, p_peer_addr, BDADDR_SIZE);
+	memcpy(lll->adv_addr, peer_addr, BDADDR_SIZE);
 	lll->conn_timeout = timeout;
 	lll->conn_ticks_slot = 0; /* TODO: */
 
@@ -121,10 +118,15 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 	conn_lll->nesn = 0;
 	conn_lll->empty = 0;
 
-#if defined(CONFIG_BT_CTLR_LE_ENC)
-	conn_lll->enc_rx = 0;
-	conn_lll->enc_tx = 0;
-#endif /* CONFIG_BT_CTLR_LE_ENC */
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+	conn_lll->max_tx_octets = PDU_DC_PAYLOAD_SIZE_MIN;
+	conn_lll->max_rx_octets = PDU_DC_PAYLOAD_SIZE_MIN;
+
+#if defined(CONFIG_BT_CTLR_PHY)
+	conn_lll->max_tx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, 0);
+	conn_lll->max_rx_time = PKT_US(PDU_DC_PAYLOAD_SIZE_MIN, 0);
+#endif /* CONFIG_BT_CTLR_PHY */
+#endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
 #if defined(CONFIG_BT_CTLR_PHY)
 	conn_lll->phy_tx = BIT(0);
@@ -190,7 +192,10 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 	conn->llcp_terminate.node_rx.hdr.link = link;
 
 #if defined(CONFIG_BT_CTLR_LE_ENC)
-	conn->pause_tx = conn->pause_rx = conn->refresh = 0U;
+	conn_lll->enc_rx = conn_lll->enc_tx = 0U;
+	conn->llcp_enc.req = conn->llcp_enc.ack = 0U;
+	conn->llcp_enc.pause_tx = conn->llcp_enc.pause_rx = 0U;
+	conn->llcp_enc.refresh = 0U;
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 #if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
@@ -199,8 +204,19 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 	conn->llcp_conn_param.disabled = 0U;
 #endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
 
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+	conn->llcp_length.req = conn->llcp_length.ack = 0U;
+	conn->llcp_length.pause_tx = 0U;
+	conn->default_tx_octets = ull_conn_default_tx_octets_get();
+
+#if defined(CONFIG_BT_CTLR_PHY)
+	conn->default_tx_time = ull_conn_default_tx_time_get();
+#endif /* CONFIG_BT_CTLR_PHY */
+#endif /* CONFIG_BT_CTLR_DATA_LENGTH */
+
 #if defined(CONFIG_BT_CTLR_PHY)
 	conn->llcp_phy.req = conn->llcp_phy.ack = 0U;
+	conn->llcp_phy.pause_tx = 0U;
 	conn->phy_pref_tx = ull_conn_default_phy_tx_get();
 	conn->phy_pref_rx = ull_conn_default_phy_rx_get();
 	conn->phy_pref_flags = 0U;
@@ -215,22 +231,27 @@ u8_t ll_create_connection(u16_t scan_interval, u16_t scan_window,
 	lll_hdr_init(&conn->lll, conn);
 
 #if defined(CONFIG_BT_CTLR_PRIVACY)
-	ll_filters_scan_update(filter_policy);
+	ull_filter_scan_update(filter_policy);
 
-	if (!filter_policy && ctrl_rl_enabled()) {
+	lll->rl_idx = FILTER_IDX_NONE;
+	lll->rpa_gen = 0;
+	if (!filter_policy && ull_filter_lll_rl_enabled()) {
 		/* Look up the resolving list */
-		rl_idx = ll_rl_find(peer_addr_type, peer_addr, NULL);
+		lll->rl_idx = ull_filter_rl_find(peer_addr_type, peer_addr,
+						 NULL);
 	}
 
 	if (own_addr_type == BT_ADDR_LE_PUBLIC_ID ||
 	    own_addr_type == BT_ADDR_LE_RANDOM_ID) {
 
 		/* Generate RPAs if required */
-		ll_rl_rpa_update(false);
+		ull_filter_rpa_update(false);
 		own_addr_type &= 0x1;
-		rpa_gen = 1;
+		lll->rpa_gen = 1;
 	}
 #endif
+
+	scan->own_addr_type = own_addr_type;
 
 	/* wait for stable clocks */
 	lll_clock_wait();
@@ -292,7 +313,7 @@ u8_t ll_chm_update(u8_t *chm)
 			continue;
 		}
 
-		ret = ull_conn_allowed_check(conn);
+		ret = ull_conn_llcp_req(conn);
 		if (ret) {
 			return ret;
 		}
@@ -314,16 +335,14 @@ u8_t ll_enc_req_send(u16_t handle, u8_t *rand, u8_t *ediv, u8_t *ltk)
 {
 	struct ll_conn *conn;
 	struct node_tx *tx;
-	u8_t ret;
 
 	conn = ll_connected_get(handle);
 	if (!conn) {
 		return BT_HCI_ERR_UNKNOWN_CONN_ID;
 	}
 
-	ret = ull_conn_allowed_check(conn);
-	if (ret) {
-		return ret;
+	if (conn->llcp_enc.req != conn->llcp_enc.ack) {
+		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
 	tx = ll_tx_mem_acquire();
@@ -332,8 +351,7 @@ u8_t ll_enc_req_send(u16_t handle, u8_t *rand, u8_t *ediv, u8_t *ltk)
 
 		pdu_data_tx = (void *)tx->pdu;
 
-		memcpy(&conn->llcp.encryption.ltk[0], ltk,
-		       sizeof(conn->llcp.encryption.ltk));
+		memcpy(&conn->llcp_enc.ltk[0], ltk, sizeof(conn->llcp_enc.ltk));
 
 		if ((conn->lll.enc_rx == 0) && (conn->lll.enc_tx == 0)) {
 			struct pdu_data_llctrl_enc_req *enc_req;
@@ -352,11 +370,11 @@ u8_t ll_enc_req_send(u16_t handle, u8_t *rand, u8_t *ediv, u8_t *ltk)
 			bt_rand(enc_req->skdm, sizeof(enc_req->skdm));
 			bt_rand(enc_req->ivm, sizeof(enc_req->ivm));
 		} else if ((conn->lll.enc_rx != 0) && (conn->lll.enc_tx != 0)) {
-			memcpy(&conn->llcp.encryption.rand[0], rand,
-			       sizeof(conn->llcp.encryption.rand));
+			memcpy(&conn->llcp_enc.rand[0], rand,
+			       sizeof(conn->llcp_enc.rand));
 
-			conn->llcp.encryption.ediv[0] = ediv[0];
-			conn->llcp.encryption.ediv[1] = ediv[1];
+			conn->llcp_enc.ediv[0] = ediv[0];
+			conn->llcp_enc.ediv[1] = ediv[1];
 
 			pdu_data_tx->ll_id = PDU_DATA_LLID_CTRL;
 			pdu_data_tx->len = offsetof(struct pdu_data_llctrl,
@@ -375,10 +393,7 @@ u8_t ll_enc_req_send(u16_t handle, u8_t *rand, u8_t *ediv, u8_t *ltk)
 			return BT_HCI_ERR_CMD_DISALLOWED;
 		}
 
-		conn->llcp.encryption.initiate = 1U;
-
-		conn->llcp_type = LLCP_ENCRYPTION;
-		conn->llcp_req++;
+		conn->llcp_enc.req++;
 
 		return 0;
 	}
@@ -398,7 +413,7 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	struct ll_scan_set *scan;
 	struct node_rx_cc *cc;
 	struct ll_conn *conn;
-	struct pdu_adv *pdu;
+	struct pdu_adv *pdu_tx;
 	u32_t ticker_status;
 	u8_t chan_sel;
 
@@ -407,14 +422,48 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	scan = ((struct lll_scan *)ftr->param)->hdr.parent;
 	conn = lll->hdr.parent;
 
-	pdu = (void *)((struct node_rx_pdu *)rx)->pdu;
-	chan_sel = pdu->chan_sel;
+	pdu_tx = (void *)((struct node_rx_pdu *)rx)->pdu;
 
-	cc = (void *)pdu;
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	u8_t own_addr_type = pdu_tx->tx_addr;
+	u8_t own_addr[BDADDR_SIZE];
+	u8_t peer_addr[BDADDR_SIZE];
+	u8_t rl_idx = ftr->rl_idx;
+
+	memcpy(own_addr, &pdu_tx->connect_ind.init_addr[0], BDADDR_SIZE);
+	memcpy(peer_addr, &pdu_tx->connect_ind.adv_addr[0], BDADDR_SIZE);
+#endif
+
+	/* This is the chan sel bit from the received adv pdu */
+	chan_sel = pdu_tx->chan_sel;
+
+	cc = (void *)pdu_tx;
 	cc->status = 0U;
 	cc->role = 0U;
-	cc->peer_addr_type = scan->lll.adv_addr_type;
-	memcpy(cc->peer_addr, scan->lll.adv_addr, BDADDR_SIZE);
+
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	cc->own_addr_type = own_addr_type;
+	memcpy(&cc->own_addr[0], &own_addr[0], BDADDR_SIZE);
+
+	if (rl_idx != FILTER_IDX_NONE) {
+		/* TODO: store rl_idx instead if safe */
+		/* Store identity address */
+		ll_rl_id_addr_get(rl_idx, &cc->peer_addr_type,
+				  &cc->peer_addr[0]);
+		/* Mark it as identity address from RPA (0x02, 0x03) */
+		cc->peer_addr_type += 2;
+
+		/* Store peer RPA */
+		memcpy(&cc->peer_rpa[0], &peer_addr[0], BDADDR_SIZE);
+	} else {
+		memset(&cc->peer_rpa[0], 0x0, BDADDR_SIZE);
+#else
+	if (1) {
+#endif /* CONFIG_BT_CTLR_PRIVACY */
+		cc->peer_addr_type = scan->lll.adv_addr_type;
+		memcpy(cc->peer_addr, scan->lll.adv_addr, BDADDR_SIZE);
+	}
+
 	cc->interval = lll->interval;
 	cc->latency = lll->latency;
 	cc->timeout = scan->lll.conn_timeout;
@@ -471,7 +520,7 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	conn->evt.ticks_slot =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US +
-				       ftr->us_radio_rdy + 328 + TIFS_US +
+				       ftr->us_radio_rdy + 328 + EVENT_IFS_US +
 				       328);
 
 	ticks_slot_offset = MAX(conn->evt.ticks_active_to_start,
@@ -538,134 +587,6 @@ void ull_master_setup(memq_link_t *link, struct node_rx_hdr *rx,
 	}
 #else
 	ARG_UNUSED(mayfly_was_enabled);
-#endif
-
-#if 0
-		/* Populate the master context */
-		conn->handle = mem_index_get(conn, _radio.conn_pool,
-					     CONNECTION_T_SIZE);
-
-		/* Prepare the rx packet structure */
-		node_rx->hdr.handle = conn->handle;
-		node_rx->hdr.type = NODE_RX_TYPE_CONNECTION;
-
-		/* prepare connection complete structure */
-		pdu_data = (void *)node_rx->pdu;
-		cc = (void *)pdu_data->lldata;
-		cc->status = 0x00;
-		cc->role = 0x00;
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-		cc->own_addr_type = pdu_adv_tx->tx_addr;
-		memcpy(&cc->own_addr[0], &pdu_adv_tx->connect_ind.init_addr[0],
-		       BDADDR_SIZE);
-
-		if (irkmatch_ok && rl_idx != FILTER_IDX_NONE) {
-			/* TODO: store rl_idx instead if safe */
-			/* Store identity address */
-			ll_rl_id_addr_get(rl_idx, &cc->peer_addr_type,
-					  &cc->peer_addr[0]);
-			/* Mark it as identity address from RPA (0x02, 0x03) */
-			cc->peer_addr_type += 2;
-
-			/* Store peer RPA */
-			memcpy(&cc->peer_rpa[0],
-			       &pdu_adv_tx->connect_ind.adv_addr[0],
-			       BDADDR_SIZE);
-		} else {
-			memset(&cc->peer_rpa[0], 0x0, BDADDR_SIZE);
-#else
-		if (1) {
-#endif /* CONFIG_BT_CTLR_PRIVACY */
-			cc->peer_addr_type = pdu_adv_tx->rx_addr;
-			memcpy(&cc->peer_addr[0],
-			       &pdu_adv_tx->connect_ind.adv_addr[0],
-			       BDADDR_SIZE);
-		}
-
-		cc->interval = _radio.scanner.conn_interval;
-		cc->latency = _radio.scanner.conn_latency;
-		cc->timeout = _radio.scanner.conn_timeout;
-		cc->mca = pdu_adv_tx->connect_ind.sca;
-
-		/* enqueue connection complete structure into queue */
-		rx_fc_lock(conn->handle);
-		packet_rx_enqueue();
-
-		/* Use Channel Selection Algorithm #2 if peer too supports it */
-		if (IS_ENABLED(CONFIG_BT_CTLR_CHAN_SEL_2)) {
-			struct node_rx_cs *cs;
-
-			/* Generate LE Channel Selection Algorithm event */
-			node_rx = packet_rx_reserve_get(3);
-			LL_ASSERT(node_rx);
-
-			node_rx->hdr.handle = conn->handle;
-			node_rx->hdr.type = NODE_RX_TYPE_CHAN_SEL_ALGO;
-
-			pdu_data = (void *)node_rx->pdu;
-			cs = (void *)pdu_data->lldata;
-
-			if (pdu_adv_rx->chan_sel) {
-				u16_t aa_ls =
-					((u16_t)conn->access_addr[1] << 8) |
-					conn->access_addr[0];
-				u16_t aa_ms =
-					((u16_t)conn->access_addr[3] << 8) |
-					 conn->access_addr[2];
-
-				conn->data_chan_sel = 1;
-				conn->data_chan_id = aa_ms ^ aa_ls;
-
-				cs->csa = 0x01;
-			} else {
-				cs->csa = 0x00;
-			}
-
-			packet_rx_enqueue();
-		}
-
-		/* Calculate master slot */
-		conn->hdr.ticks_active_to_start = _radio.ticks_active_to_start;
-		conn->hdr.ticks_xtal_to_start =	HAL_TICKER_US_TO_TICKS(
-			EVENT_OVERHEAD_XTAL_US);
-		conn->hdr.ticks_preempt_to_start = HAL_TICKER_US_TO_TICKS(
-			EVENT_OVERHEAD_PREEMPT_MIN_US);
-		conn->hdr.ticks_slot = _radio.scanner.ticks_conn_slot;
-		ticks_slot_offset = MAX(conn->hdr.ticks_active_to_start,
-					conn->hdr.ticks_xtal_to_start);
-
-		/* Stop Scanner */
-		ticker_status = ticker_stop(TICKER_INSTANCE_ID_CTLR,
-					    TICKER_USER_ID_LLL,
-					    TICKER_ID_SCAN_BASE,
-					    ticker_stop_scan_assert,
-					    (void *)__LINE__);
-		ticker_stop_scan_assert(ticker_status, (void *)__LINE__);
-
-		/* Scanner stop can expire while here in this ISR.
-		 * Deferred attempt to stop can fail as it would have
-		 * expired, hence ignore failure.
-		 */
-		ticker_stop(TICKER_INSTANCE_ID_CTLR,
-			    TICKER_USER_ID_LLL,
-			    TICKER_ID_SCAN_STOP, NULL, NULL);
-
-		/* Start master */
-		ticker_status =
-			ticker_start(TICKER_INSTANCE_ID_CTLR,
-				     TICKER_USER_ID_LLL,
-				     TICKER_ID_CONN_BASE +
-				     conn->handle,
-				     (_radio.ticks_anchor - ticks_slot_offset),
-				     HAL_TICKER_US_TO_TICKS(conn_space_us),
-				     HAL_TICKER_US_TO_TICKS(conn_interval_us),
-				     HAL_TICKER_REMAINDER(conn_interval_us),
-				     TICKER_NULL_LAZY,
-				     (ticks_slot_offset + conn->hdr.ticks_slot),
-				     event_master_prepare, conn,
-				     ticker_success_assert, (void *)__LINE__);
-		LL_ASSERT((ticker_status == TICKER_STATUS_SUCCESS) ||
-			  (ticker_status == TICKER_STATUS_BUSY));
 #endif
 }
 

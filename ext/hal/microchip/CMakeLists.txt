@@ -1,1 +1,0 @@
-zephyr_include_directories_ifdef(CONFIG_HAS_MEC_HAL mec)

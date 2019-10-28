@@ -20,3 +20,6 @@ supported:
   - spi
   - netif:eth
   - hwinfo
+  - usb_device
+  - counter
+  - sdhc

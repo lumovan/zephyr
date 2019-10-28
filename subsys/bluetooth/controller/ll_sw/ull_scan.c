@@ -29,6 +29,7 @@
 
 #include "ull_adv_types.h"
 #include "ull_scan_types.h"
+#include "ull_filter.h"
 
 #include "ull_internal.h"
 #include "ull_adv_internal.h"
@@ -58,8 +59,11 @@ u8_t ll_scan_params_set(u8_t type, u16_t interval, u16_t window,
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
-	return ull_scan_params_set(scan, type, interval, window, own_addr_type,
-				   filter_policy);
+	scan->own_addr_type = own_addr_type;
+
+	ull_scan_params_set(&scan->lll, type, interval, window, filter_policy);
+
+	return 0;
 }
 
 u8_t ll_scan_enable(u8_t enable)
@@ -74,6 +78,22 @@ u8_t ll_scan_enable(u8_t enable)
 	if (!scan) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
+
+#if defined(CONFIG_BT_CTLR_PRIVACY)
+	struct lll_scan *lll = &scan->lll;
+	ull_filter_scan_update(lll->filter_policy);
+
+	lll->rl_idx = FILTER_IDX_NONE;
+	lll->rpa_gen = 0;
+
+	if ((lll->type & 0x1) &&
+	    (scan->own_addr_type == BT_ADDR_LE_PUBLIC_ID ||
+	     scan->own_addr_type == BT_ADDR_LE_RANDOM_ID)) {
+		/* Generate RPAs if required */
+		ull_filter_rpa_update(false);
+		lll->rpa_gen = 1;
+	}
+#endif
 
 	return ull_scan_enable(scan);
 }
@@ -107,12 +127,9 @@ int ull_scan_reset(void)
 	return 0;
 }
 
-u8_t ull_scan_params_set(struct ll_scan_set *scan, u8_t type,
-			 u16_t interval, u16_t window,
-			 u8_t own_addr_type, u8_t filter_policy)
+void ull_scan_params_set(struct lll_scan *lll, u8_t type, u16_t interval,
+			 u16_t window, u8_t filter_policy)
 {
-	struct lll_scan *lll = &scan->lll;
-
 	/* type value:
 	 * 0000b - legacy 1M passive
 	 * 0001b - legacy 1M active
@@ -134,10 +151,6 @@ u8_t ull_scan_params_set(struct ll_scan_set *scan, u8_t type,
 	lll->filter_policy = filter_policy;
 	lll->interval = interval;
 	lll->ticks_window = HAL_TICKER_US_TO_TICKS((u64_t)window * 625U);
-
-	scan->own_addr_type = own_addr_type;
-
-	return 0;
 }
 
 u8_t ull_scan_enable(struct ll_scan_set *scan)
@@ -150,19 +163,7 @@ u8_t ull_scan_enable(struct ll_scan_set *scan)
 	u32_t ticks_anchor;
 	u32_t ret;
 
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-	ll_filters_scan_update(scan->filter_policy);
-
-	if ((scan->type & 0x1) &&
-	    (scan->own_addr_type == BT_ADDR_LE_PUBLIC_ID ||
-	     scan->own_addr_type == BT_ADDR_LE_RANDOM_ID)) {
-		/* Generate RPAs if required */
-		ll_rl_rpa_update(false);
-		lll->rpa_gen = 1;
-		lll->rl_idx = FILTER_IDX_NONE;
-	}
-#endif
-
+	lll->chan = 0;
 	lll->init_addr_type = scan->own_addr_type;
 	ll_addr_get(lll->init_addr_type, lll->init_addr);
 
@@ -244,7 +245,7 @@ u8_t ull_scan_enable(struct ll_scan_set *scan)
 	if (!ull_adv_is_enabled_get(0))
 #endif
 	{
-		ll_adv_scan_state_cb(BIT(1));
+		ull_filter_adv_scan_state_cb(BIT(1));
 	}
 #endif
 
@@ -293,6 +294,11 @@ struct ll_scan_set *ull_scan_set_get(u16_t handle)
 u16_t ull_scan_handle_get(struct ll_scan_set *scan)
 {
 	return ((u8_t *)scan - (u8_t *)ll_scan) / sizeof(*scan);
+}
+
+u16_t ull_scan_lll_handle_get(struct lll_scan *lll)
+{
+	return ull_scan_handle_get((void *)lll->hdr.parent);
 }
 
 struct ll_scan_set *ull_scan_is_enabled_get(u16_t handle)
@@ -417,7 +423,7 @@ static u8_t disable(u16_t handle)
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
 
-#if defined(CONFIG_BT_CONN)
+#if defined(CONFIG_BT_CENTRAL)
 	if (scan->lll.conn) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
 	}
@@ -435,7 +441,7 @@ static u8_t disable(u16_t handle)
 	if (!ull_adv_is_enabled_get(0))
 #endif
 	{
-		ll_adv_scan_state_cb(0);
+		ull_filter_adv_scan_state_cb(0);
 	}
 #endif
 

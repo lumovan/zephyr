@@ -55,6 +55,8 @@ This probe is realized by programming the LPC-Link2 microcontroller with J-Link
 LPC-Link2 firmware. Download and install `LPCScrypt`_ to get the firmware and
 programming scripts.
 
+.. note:: Verify the firmware supports your board by visiting `Firmware for LPCXpresso`_
+
 1. Put the LPC-Link2 microcontroller into DFU boot mode by attaching the DFU
    jumper, then powering up the board.
 
@@ -188,22 +190,28 @@ Using Segger J-Link
 Once STLink is flashed with SEGGER FW and J-Link GDB server is installed on your
 host computer, you can flash and debug as follows:
 
-Use the CMake ``flash`` target with the argument ``STLINK_FW=jlink`` to
-build your Zephyr application.
+Use CMake with ``-DZEPHYR_BOARD_FLASH_RUNNER=jlink`` to change the default OpenOCD
+runner to J-Link. Alternatively, you might add the following line to your
+application ``CMakeList.txt`` file.
 
-  .. zephyr-app-commands::
-     :zephyr-app: samples/hello_world
-     :gen-args: -DSTLINK_FW=jlink
-     :goals: flash
+  .. code-block:: cmake
 
-Use the CMake ``debug`` target with the argument ``STLINK_FW=jlink`` to build
-your Zephyr application, invoke the J-Link GDB server, attach a GDB client, and
-program your Zephyr application to flash. It will leave you at a GDB prompt.
+     set(ZEPHYR_BOARD_FLASH_RUNNER jlink)
 
-  .. zephyr-app-commands::
-     :zephyr-app: samples/hello_world
-     :gen-args: -DSTLINK_FW=jlink
-     :goals: debug
+If you use West (Zephyr's meta-tool) you can modify the default runner using
+the ``--runner`` (or ``-r``) option.
+
+  .. code-block:: console
+
+     west flash --runner jlink
+
+To attach a debugger to your board and open up a debug console with ``jlink``.
+
+  .. code-block:: console
+
+     west debug --runner jlink
+
+For more information about West and available options, see :ref:`west`.
 
 If you configured your Zephyr application to use `Segger RTT`_ console instead,
 open telnet:
@@ -244,6 +252,9 @@ Install the debug host tools before you program the firmware.
 
 .. _LPCScrypt:
    https://www.nxp.com/lpcscrypt
+
+.. _Firmware for LPCXpresso:
+   https://www.segger.com/products/debug-probes/j-link/models/other-j-links/lpcxpresso-on-board/
 
 .. _OpenSDA DAPLink Board-Specific Firmwares:
    https://www.nxp.com/opensda

@@ -17,7 +17,7 @@
 #include "sw_isr_table.h"
 #include "soc.h"
 #include "bs_tracing.h"
-#include <tracing.h>
+#include <debug/tracing.h>
 #include "bstests.h"
 
 static bool CPU_will_be_awaken_from_WFE;
@@ -85,11 +85,6 @@ static inline void vector_to_irq(int irq_nbr, int *may_swap)
 	bs_trace_raw_time(6, "Vectoring to irq %i (%s)\n", irq_nbr,
 			  irqnames[irq_nbr]);
 
-	/*
-	 * As in this architecture an irq (code) executes in 0 time,
-	 * it is a bit senseless to call z_int_latency_start/stop()
-	 */
-	/* z_int_latency_start(); */
 	sys_trace_isr_enter();
 
 	if (irq_vector_table[irq_nbr].func == NULL) { /* LCOV_EXCL_BR_LINE */
@@ -113,7 +108,6 @@ static inline void vector_to_irq(int irq_nbr, int *may_swap)
 	}
 
 	sys_trace_isr_exit();
-	/* z_int_latency_stop(); */
 
 	bs_trace_raw_time(7, "Irq %i (%s) ended\n", irq_nbr, irqnames[irq_nbr]);
 }

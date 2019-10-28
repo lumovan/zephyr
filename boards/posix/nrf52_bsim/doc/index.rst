@@ -53,14 +53,18 @@ Building and running
    does not support native 32-bit binaries.
 
 To target this board you need to have `BabbleSim`_ compiled in your system.
-If you do not have it yet, you can fetch and build it in this way:
+If you do not have it yet, in `its webpage <https://BabbleSim.github.io>`_
+you can find instructions on how to
+`fetch <https://babblesim.github.io/fetching.html>`_ and
+`build <https://babblesim.github.io/building.html>`_ it.
+In short, you can do:
 
 .. code-block:: console
 
    mkdir -p ${HOME}/bsim && cd ${HOME}/bsim
-   repo init -u git@github.com:BabbleSim/manifest.git -m everything.xml \
-     -b master
-   repo sync
+   curl https://storage.googleapis.com/git-repo-downloads/repo > ./repo  && chmod a+x ./repo
+   ./repo init -u git@github.com:BabbleSim/manifest.git -m everything.xml -b master
+   ./repo sync
    make everything -j 8
 
 Define two environment variables to point to your BabbleSim
@@ -71,6 +75,12 @@ If you followed the previous steps, you can just do:
 
    export BSIM_OUT_PATH=${HOME}/bsim/
    export BSIM_COMPONENTS_PATH=${HOME}/bsim/components/
+
+.. note::
+
+   You can add these two lines to your ``~/.zephyrrc`` file, or to your shell
+   initialization script (``~/.bashrc``), so you won't need to rerun them
+   manually for each new shell.
 
 You're now ready to build applications targeting this board, for example:
 
@@ -85,7 +95,7 @@ Then you can execute your application using:
 
 .. code-block:: console
 
-   $ zephyr/zephyr.exe -nosim
+   $ ./build/zephyr/zephyr.exe -nosim
    # Press Ctrl+C to exit
 
 Note that the executable is a BabbleSim executable. The ``-nosim`` command line
@@ -110,7 +120,7 @@ executable to the simulator bin folder with a sensible name:
 
 .. code-block:: console
 
-   $ cp zephyr/zephyr.exe \
+   $ cp build/zephyr/zephyr.exe \
      ${BSIM_OUT_PATH}/bin/bs_nrf52_bsim_samples_bluetooth_central_hr
 
 Do the same for the ``peripheral`` sample app:
@@ -124,7 +134,7 @@ Do the same for the ``peripheral`` sample app:
 
 .. code-block:: console
 
-   $ cp zephyr/zephyr.exe \
+   $ cp build/zephyr/zephyr.exe \
      ${BSIM_OUT_PATH}/bin/bs_nrf52_bsim_samples_bluetooth_peripheral
 
 And then run them together with BabbleSim's 2G4 physical layer simulation:

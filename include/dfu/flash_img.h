@@ -8,17 +8,20 @@
 #ifndef ZEPHYR_INCLUDE_DFU_FLASH_IMG_H_
 #define ZEPHYR_INCLUDE_DFU_FLASH_IMG_H_
 
+#include <storage/flash_map.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <flash_map.h>
 
 struct flash_img_context {
 	u8_t buf[CONFIG_IMG_BLOCK_BUF_SIZE];
 	const struct flash_area *flash_area;
 	size_t bytes_written;
 	u16_t buf_bytes;
+#ifdef CONFIG_IMG_ERASE_PROGRESSIVELY
+	off_t off_last;
+#endif
 };
 
 /**

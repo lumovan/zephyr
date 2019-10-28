@@ -4,6 +4,12 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# NOTE: This file is part of the old device tree scripts, which will be removed
+# later. They are kept to generate some legacy #defines via the
+# --deprecated-only flag.
+#
+# The new scripts are gen_defines.py, edtlib.py, and dtlib.py.
+
 from extract.globals import *
 from extract.directive import DTDirective
 
@@ -11,6 +17,21 @@ from extract.directive import DTDirective
 # @brief Manage directives in a default way.
 #
 class DTDefault(DTDirective):
+    def _extract_enum(self, node_path, prop, prop_values, label):
+        cell_yaml = get_binding(node_path)['properties'][prop]
+        if 'enum' in cell_yaml:
+            if prop_values in cell_yaml['enum']:
+                if isinstance(cell_yaml['enum'], list):
+                   value = cell_yaml['enum'].index(prop_values)
+                if isinstance(cell_yaml['enum'], dict):
+                   value = cell_yaml['enum'][prop_values]
+                label = label + "_ENUM"
+                return {label:value}
+            else:
+                print("ERROR")
+        return {}
+
+
     ##
     # @brief Extract directives in a default way
     #
@@ -31,7 +52,18 @@ class DTDefault(DTDirective):
         else:
             prop_values = reduced[node_path]['props'][prop]
 
-        if isinstance(prop_values, list):
+        if prop_type == "string-array" or prop_type == "array" or prop_type == "uint8-array":
+            if type(prop_values) is not list: prop_values = [ prop_values, ]
+
+        if prop_type == "uint8-array":
+            prop_name = str_to_label(prop)
+            label = def_label + '_' + prop_name
+            prop_value = ''.join(['{ ',
+                                  ', '.join(["0x%02x" % b for b in prop_values]),
+                                  ' }'])
+            prop_def[label] = prop_value
+            add_compat_alias(node_path, prop_name, label, prop_alias)
+        elif isinstance(prop_values, list):
             for i, prop_value in enumerate(prop_values):
                 prop_name = str_to_label(prop)
                 label = def_label + '_' + prop_name
@@ -49,6 +81,9 @@ class DTDefault(DTDirective):
             if prop_values == 'parent-label':
                 prop_values = find_parent_prop(node_path, 'label')
 
+            prop_def = self._extract_enum(node_path, prop, prop_values, label)
+            if prop_def:
+                add_compat_alias(node_path, prop_name + "_ENUM" , label + "_ENUM", prop_alias)
             if isinstance(prop_values, str):
                 prop_values = "\"" + prop_values + "\""
             prop_def[label] = prop_values

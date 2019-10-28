@@ -18,29 +18,24 @@
 
 #include <spinlock.h>
 #include <kernel_structs.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
+#include <sys/math_extras.h>
 #include <sys_clock.h>
-#include <drivers/system_timer.h>
+#include <drivers/timer/system_timer.h>
 #include <ksched.h>
 #include <wait_q.h>
-#include <atomic.h>
+#include <sys/atomic.h>
 #include <syscall_handler.h>
 #include <kernel_internal.h>
 #include <kswap.h>
 #include <init.h>
-#include <tracing.h>
+#include <debug/tracing.h>
 #include <stdbool.h>
-
-extern struct _static_thread_data _static_thread_data_list_start[];
-extern struct _static_thread_data _static_thread_data_list_end[];
 
 static struct k_spinlock lock;
 
 #define _FOREACH_STATIC_THREAD(thread_data)              \
-	for (struct _static_thread_data *thread_data =   \
-	     _static_thread_data_list_start;             \
-	     thread_data < _static_thread_data_list_end; \
-	     thread_data++)
+	Z_STRUCT_SECTION_FOREACH(_static_thread_data, thread_data)
 
 void k_thread_foreach(k_thread_user_cb_t user_cb, void *user_data)
 {
@@ -315,7 +310,7 @@ void z_check_stack_sentinel(void)
 	if (*stack != STACK_SENTINEL) {
 		/* Restore it so further checks don't trigger this same error */
 		*stack = STACK_SENTINEL;
-		z_except_reason(_NANO_ERR_STACK_CHK_FAIL);
+		z_except_reason(K_ERR_STACK_CHK_FAIL);
 	}
 }
 #endif
@@ -408,6 +403,14 @@ void z_setup_new_thread(struct k_thread *new_thread,
 		       void *p1, void *p2, void *p3,
 		       int prio, u32_t options, const char *name)
 {
+#ifdef CONFIG_USERSPACE
+	z_object_init(new_thread);
+	z_object_init(stack);
+	new_thread->stack_obj = stack;
+
+	/* Any given thread has access to itself */
+	k_object_access_grant(new_thread, new_thread);
+#endif
 	stack_size = adjust_stack_size(stack_size);
 
 #ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
@@ -452,14 +455,6 @@ void z_setup_new_thread(struct k_thread *new_thread,
 		new_thread->name[CONFIG_THREAD_MAX_NAME_LEN - 1] = '\0';
 	}
 #endif
-#ifdef CONFIG_USERSPACE
-	z_object_init(new_thread);
-	z_object_init(stack);
-	new_thread->stack_obj = stack;
-
-	/* Any given thread has access to itself */
-	k_object_access_grant(new_thread, new_thread);
-#endif
 #ifdef CONFIG_SCHED_CPU_MASK
 	new_thread->base.cpu_mask = -1;
 #endif
@@ -500,7 +495,8 @@ k_tid_t z_impl_k_thread_create(struct k_thread *new_thread,
 	/* Special case, only for unit tests */
 #if defined(CONFIG_TEST) && defined(CONFIG_ARCH_HAS_USERSPACE) && !defined(CONFIG_USERSPACE)
 	__ASSERT((options & K_USER) == 0,
-		 "Platform is capable of user mode, and test thread created with K_USER option, but CONFIG_TEST_USERSPACE or CONFIG_USERSPACE is not set\n");
+		 "Platform is capable of user mode, and test thread created with K_USER option,"
+		 " but neither CONFIG_TEST_USERSPACE nor CONFIG_USERSPACE is set\n");
 #endif
 
 	z_setup_new_thread(new_thread, stack, stack_size, entry, p1, p2, p3,
@@ -539,9 +535,8 @@ Z_SYSCALL_HANDLER(k_thread_create,
 	/* Verify that the stack size passed in is OK by computing the total
 	 * size and comparing it with the size value in the object metadata
 	 */
-	Z_OOPS(Z_SYSCALL_VERIFY_MSG(!__builtin_uadd_overflow(K_THREAD_STACK_RESERVED,
-							     stack_size,
-							     &total_size),
+	Z_OOPS(Z_SYSCALL_VERIFY_MSG(!u32_add_overflow(K_THREAD_STACK_RESERVED,
+						      stack_size, &total_size),
 				    "stack size overflow (%u+%u)", stack_size,
 				    K_THREAD_STACK_RESERVED));
 
@@ -677,16 +672,10 @@ void z_thread_single_abort(struct k_thread *thread)
 
 #ifdef CONFIG_MULTITHREADING
 #ifdef CONFIG_USERSPACE
-extern char __object_access_start[];
-extern char __object_access_end[];
 
 static void grant_static_access(void)
 {
-	struct _k_object_assignment *pos;
-
-	for (pos = (struct _k_object_assignment *)__object_access_start;
-	     pos < (struct _k_object_assignment *)__object_access_end;
-	     pos++) {
+	Z_STRUCT_SECTION_FOREACH(_k_object_assignment, pos) {
 		for (int i = 0; pos->objects[i] != NULL; i++) {
 			k_object_access_grant(pos->objects[i],
 					      pos->thread);
@@ -790,7 +779,7 @@ bool z_spin_lock_valid(struct k_spinlock *l)
 
 bool z_spin_unlock_valid(struct k_spinlock *l)
 {
-	if (l->thread_cpu != (_current_cpu->id | (u32_t)_current)) {
+	if (l->thread_cpu != (_current_cpu->id | (uintptr_t)_current)) {
 		return false;
 	}
 	l->thread_cpu = 0;
@@ -799,7 +788,27 @@ bool z_spin_unlock_valid(struct k_spinlock *l)
 
 void z_spin_lock_set_owner(struct k_spinlock *l)
 {
-	l->thread_cpu = _current_cpu->id | (u32_t)_current;
+	l->thread_cpu = _current_cpu->id | (uintptr_t)_current;
 }
 
 #endif
+
+int z_impl_k_float_disable(struct k_thread *thread)
+{
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+	return z_arch_float_disable(thread);
+#else
+	return -ENOSYS;
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(k_float_disable, thread_p)
+{
+	struct k_thread *thread = (struct k_thread *)thread_p;
+
+	Z_OOPS(Z_SYSCALL_OBJ(thread, K_OBJ_THREAD));
+
+	return z_impl_k_float_disable((struct k_thread *)thread_p);
+}
+#endif /* CONFIG_USERSPACE */

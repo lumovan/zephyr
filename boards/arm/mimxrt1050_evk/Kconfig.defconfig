@@ -64,10 +64,10 @@ endif # UART_MCUX_LPUART
 if NETWORKING
 
 config NET_L2_ETHERNET
-	def_bool y
+	default y
 
 config ETH_MCUX_0
-	def_bool y if NET_L2_ETHERNET
+	default y if NET_L2_ETHERNET
 
 endif # NETWORKING
 
@@ -87,9 +87,6 @@ config LVGL_VDB_SIZE
 
 config LVGL_DPI
 	default 128
-
-config LVGL_BITS_PER_PIXEL
-	default 0
 
 choice LVGL_COLOR_DEPTH
 	default LVGL_COLOR_DEPTH_16

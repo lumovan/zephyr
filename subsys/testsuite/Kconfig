@@ -4,12 +4,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-menu Testing
+menu "Testing"
 
 source "subsys/testsuite/ztest/Kconfig"
 
 config TEST
 	bool "Mark project as a test"
+	# For tests, store thread names in binary and dump them on crash to
+	# ease debugging.
+	select THREAD_NAME
 	help
 	  Mark a project or an application as a test. This will enable a few
 	  test defaults.
@@ -61,8 +64,11 @@ config TEST_USERSPACE
 	bool "Indicate that this test exercises user mode"
 	help
 	  This option indicates that a test case puts threads in user mode,
-	  and that the build system should enable userspace if the platform
-	  supports it. It should be set on a per-test basis.
+	  and that the build system will [override and] enable USERSPACE
+	  if the platform supports it. It should be set in a .conf file on
+	  a per-test basis and is not meant to be used outside test cases.
+	  Tests with this option should also have the "userspace" filtering
+	  tag in their testcase.yaml file.
 
 	  The userspace APIs are no-ops if userspace is not enabled, so it is
 	  OK to enable this even if the test will run on platforms which do
@@ -70,7 +76,7 @@ config TEST_USERSPACE
 	  just with all threads in supervisor mode.
 
 	  If a test *requires* that userspace be enabled in order to
-	  function, CONFIG_ARCH_HAS_USERSPACE should be filtered in its
+	  pass, CONFIG_ARCH_HAS_USERSPACE should be filtered in its
 	  testcase.yaml.
 
 config TEST_ENABLE_USERSPACE
@@ -81,17 +87,27 @@ config TEST_ENABLE_USERSPACE
 	select DYNAMIC_OBJECTS
 	default y
 	help
-	  This hidden option will help test the userspace mode. This will be
-	  enabled only when CONFIG_ARCH_HAS_USERSPACE is set, and that the test
+	  This hidden option implements the TEST_USERSPACE logic. It turns on
+	  USERSPACE when CONFIG_ARCH_HAS_USERSPACE is set and the test
 	  case itself indicates that it exercises user mode via
 	  CONFIG_TEST_USERSPACE.
+
+config TEST_USERSPACE_WITHOUT_HW_STACK_PROTECTION
+	bool "Run User Mode tests without additionally enabling stack protection"
+	depends on TEST_ENABLE_USERSPACE
+	default y if SOC_SERIES_KINETIS_KE1XF
+	help
+	  A HW platform might not have sufficient MPU/MMU capabilities to support
+	  running all test cases with User Mode and HW Stack Protection features
+	  simultaneously enabled. For this platforms we execute the User Mode-
+	  related tests without enabling HW stack protection.
 
 config TEST_HW_STACK_PROTECTION
 	bool "Enable hardware-based stack overflow detection if available"
 	depends on ARCH_HAS_STACK_PROTECTION
 	depends on TEST
 	select HW_STACK_PROTECTION
-	default y
+	default y if !TEST_USERSPACE_WITHOUT_HW_STACK_PROTECTION
 	help
 	  This option will enable hardware-based stack protection by default
 	  for all test cases if the hardware supports it.
@@ -104,4 +120,20 @@ config TEST_FLASH_DRIVERS
 	help
 	  This option will help test the flash drivers. This should be enabled
 	  only when using qemu_x86.
+
+config TEST_ARM_CORTEX_M
+	bool
+	depends on CPU_CORTEX_M
+	default y
+	select ARM_SECURE_BUSFAULT_HARDFAULT_NMI if ARM_SECURE_FIRMWARE
+	help
+	  ARM Cortex-M configuration required when testing.
+
+	  Currently, this option is only utilized, to force routing
+	  BusFault, HardFault, and NMI exceptions to Secure State,
+	  when building a Secure ARMv8-M firmware. This will allow
+	  the testing suite to utilize these exceptions, in tests.
+	  Note that by default, when building with ARM_SECURE_FIRMWARE
+	  set, these exceptions are set to target the Non-Secure state.
+
 endmenu

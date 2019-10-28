@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
-
 set(HOST_TOOLS_HOME ${ZEPHYR_SDK_INSTALL_DIR}/sysroots/${TOOLCHAIN_ARCH}-pokysdk-linux)
 
 # Path used for searching by the find_*() functions, with appropriate

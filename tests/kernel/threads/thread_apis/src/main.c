@@ -72,7 +72,7 @@ void test_systhreads_idle(void)
 
 static void customdata_entry(void *p1, void *p2, void *p3)
 {
-	u32_t data = 1U;
+	long data = 1U;
 
 	zassert_is_null(k_thread_custom_data_get(), NULL);
 	while (1) {
@@ -80,7 +80,7 @@ static void customdata_entry(void *p1, void *p2, void *p3)
 		/* relinguish cpu for a while */
 		k_sleep(50);
 		/** TESTPOINT: custom data comparison */
-		zassert_equal(data, (u32_t)k_thread_custom_data_get(), NULL);
+		zassert_equal(data, (long)k_thread_custom_data_get(), NULL);
 		data++;
 	}
 }

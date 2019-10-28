@@ -17,28 +17,6 @@
 		};
 	};
 
-	flash-controller@4001E000 {
-			compatible = "nordic,nrf52-flash-controller";
-			reg = <0x4001E000 0x1000>;
-
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			label="NRF_FLASH_DRV_NAME";
-
-			flash0: flash@0 {
-				compatible = "soc-nv-flash";
-				label = "NRF_FLASH";
-				erase-block-size = <4096>;
-				write-block-size = <4>;
-			};
-	};
-
-	sram0: memory@20000000 {
-		device_type = "memory";
-		compatible = "mmio-sram";
-	};
-
 	aliases {
 		i2c-0 = &i2c0;
 		i2c-1 = &i2c1;
@@ -65,6 +43,28 @@
 	};
 
 	soc {
+
+		flash-controller@4001e000 {
+			compatible = "nordic,nrf52-flash-controller";
+			reg = <0x4001e000 0x1000>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			label="NRF_FLASH_DRV_NAME";
+
+			flash0: flash@0 {
+				compatible = "soc-nv-flash";
+				label = "NRF_FLASH";
+				erase-block-size = <4096>;
+				write-block-size = <4>;
+			};
+		};
+
+		sram0: memory@20000000 {
+			compatible = "mmio-sram";
+		};
+
 		adc: adc@40007000 {
 			compatible = "nordic,nrf-saadc";
 			reg = <0x40007000 0x1000>;
@@ -77,7 +77,7 @@
 			compatible = "nordic,nrf-clock";
 			reg = <0x40000000 0x1000>;
 			interrupts = <0 1>;
-			status = "ok";
+			status = "okay";
 			label = "CLOCK";
 		};
 
@@ -195,7 +195,9 @@
 			compatible = "nordic,nrf-rtc";
 			reg = <0x4000b000 0x1000>;
 			interrupts = <11 1>;
-			status = "ok";
+			status = "okay";
+			clock-frequency = <32768>;
+			prescaler = <1>;
 			label = "RTC_0";
 		};
 
@@ -203,7 +205,9 @@
 			compatible = "nordic,nrf-rtc";
 			reg = <0x40011000 0x1000>;
 			interrupts = <17 1>;
-			status = "ok";
+			status = "okay";
+			clock-frequency = <32768>;
+			prescaler = <1>;
 			label = "RTC_1";
 		};
 
@@ -211,47 +215,54 @@
 			compatible = "nordic,nrf-rtc";
 			reg = <0x40024000 0x1000>;
 			interrupts = <36 1>;
-			status = "ok";
+			status = "okay";
+			clock-frequency = <32768>;
+			prescaler = <1>;
 			label = "RTC_2";
 		};
 
 		timer0: timer@40008000 {
 			compatible = "nordic,nrf-timer";
-			status = "ok";
+			status = "okay";
 			reg = <0x40008000 0x1000>;
 			interrupts = <8 1>;
+			prescaler = <0>;
 			label = "TIMER_0";
 		};
 
 		timer1: timer@40009000 {
 			compatible = "nordic,nrf-timer";
-			status = "ok";
+			status = "okay";
 			reg = <0x40009000 0x1000>;
 			interrupts = <9 1>;
+			prescaler = <0>;
 			label = "TIMER_1";
 		};
 
 		timer2: timer@4000a000 {
 			compatible = "nordic,nrf-timer";
-			status = "ok";
+			status = "okay";
 			reg = <0x4000a000 0x1000>;
 			interrupts = <10 1>;
+			prescaler = <0>;
 			label = "TIMER_2";
 		};
 
 		timer3: timer@4001a000 {
 			compatible = "nordic,nrf-timer";
-			status = "ok";
+			status = "okay";
 			reg = <0x4001a000 0x1000>;
 			interrupts = <26 1>;
+			prescaler = <0>;
 			label = "TIMER_3";
 		};
 
 		timer4: timer@4001b000 {
 			compatible = "nordic,nrf-timer";
-			status = "ok";
+			status = "okay";
 			reg = <0x4001b000 0x1000>;
 			interrupts = <27 1>;
+			prescaler = <0>;
 			label = "TIMER_4";
 		};
 
@@ -259,7 +270,7 @@
 			compatible = "nordic,nrf-temp";
 			reg = <0x4000c000 0x1000>;
 			interrupts = <12 1>;
-			status = "ok";
+			status = "okay";
 			label = "TEMP_0";
 		};
 
@@ -267,7 +278,7 @@
 			compatible = "nordic,nrf-watchdog";
 			reg = <0x40010000 0x1000>;
 			interrupts = <16 1>;
-			status = "ok";
+			status = "okay";
 			label = "WDT";
 		};
 	};
