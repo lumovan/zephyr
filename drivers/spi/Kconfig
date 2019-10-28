@@ -43,10 +43,10 @@ config	SPI_0
 	bool "SPI port 0"
 	help
 	  Enable SPI controller port 0.
-rivers/spi/Kco
-rivers/spi/Kco
-rivers/spi/Kco
-rivers/spi/Kco
+
+if SPI_0
+
+config SPI_0_OP_MODES
 	int "Port 0 supported operation modes (master/slave/both)"
 	default 1
 	range 1 3
